@@ -14,36 +14,115 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
     const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
     const socketRef = useRef<WebSocket | null>(null);
 
-    const [granularity, setGranularity] = useState(60); // Default 1m
+    const GRANULARITY = 60; // Fixed 1m
 
-    const timeframes = [
-        { label: '1m', value: 60 },
-        { label: '5m', value: 300 },
-        { label: '15m', value: 900 },
-        { label: '1h', value: 3600 },
-        { label: '1d', value: 86400 },
-    ];
+    // Refs for trendlines
+    const resistanceLinesRef = useRef<ISeriesApi<'Line'>[]>([]);
+    const supportLinesRef = useRef<ISeriesApi<'Line'>[]>([]);
 
     useEffect(() => {
         if (!chartContainerRef.current) return;
 
         const chart = createChart(chartContainerRef.current, {
-            layout: { background: { color: '#0f172a' }, textColor: '#e5e7eb' },
-            grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
+            layout: { background: { color: '#020617' }, textColor: '#94a3b8' },
+            grid: { vertLines: { color: '#0f172a' }, horzLines: { color: '#0f172a' } },
             width: chartContainerRef.current.clientWidth,
             height: chartContainerRef.current.clientHeight,
-            timeScale: { timeVisible: true, secondsVisible: true },
+            timeScale: {
+                timeVisible: true,
+                secondsVisible: true,
+                borderVisible: false,
+            },
+            rightPriceScale: {
+                borderVisible: false,
+            },
         });
 
         const series = chart.addSeries(CandlestickSeries, {
-            upColor: '#22c55e', downColor: '#ef4444', borderVisible: false,
-            wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+            upColor: '#10b981', downColor: '#ef4444', borderVisible: false,
+            wickUpColor: '#10b981', wickDownColor: '#ef4444',
         });
 
         chartRef.current = chart;
         seriesRef.current = series;
 
         let allCandles: any[] = [];
+        let markers: any[] = [];
+
+        const findPivots = (data: any[]) => {
+            const pivotHighs: any[] = [];
+            const pivotLows: any[] = [];
+            const window = 5;
+
+            for (let i = window; i < data.length - window; i++) {
+                const current = data[i];
+                let isHigh = true, isLow = true;
+                for (let j = 1; j <= window; j++) {
+                    if (data[i - j].high >= current.high || data[i + j].high > current.high) isHigh = false;
+                    if (data[i - j].low <= current.low || data[i + j].low < current.low) isLow = false;
+                }
+                if (isHigh) pivotHighs.push({ ...current, index: i });
+                if (isLow) pivotLows.push({ ...current, index: i });
+            }
+            return { pivotHighs, pivotLows };
+        };
+
+        const updateTrendlines = (data: any[]) => {
+            if (!chartRef.current) return;
+            const { pivotHighs, pivotLows } = findPivots(data);
+
+            // Cleanup
+            resistanceLinesRef.current.forEach(l => chartRef.current?.removeSeries(l));
+            supportLinesRef.current.forEach(l => chartRef.current?.removeSeries(l));
+            resistanceLinesRef.current = [];
+            supportLinesRef.current = [];
+
+            let trendData: any = null;
+
+            // Draw Resistance (Pivots High)
+            if (pivotHighs.length >= 2) {
+                const p1 = pivotHighs[pivotHighs.length - 2];
+                const p2 = pivotHighs[pivotHighs.length - 1];
+                const line = chartRef.current.addSeries(LineSeries, { color: '#ef4444', lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false });
+                const slope = (p2.high - p1.high) / (p2.index - p1.index);
+                const trendPoints = data.slice(p1.index).map((d, i) => ({ time: d.time, value: p1.high + slope * (p1.index + i - p1.index) }));
+                line.setData(trendPoints);
+                resistanceLinesRef.current.push(line);
+                trendData = { type: 'resistance', slope, p2, trendPoints };
+            }
+
+            // Draw Support (Pivots Low)
+            if (pivotLows.length >= 2) {
+                const p1 = pivotLows[pivotLows.length - 2];
+                const p2 = pivotLows[pivotLows.length - 1];
+                const line = chartRef.current.addSeries(LineSeries, { color: '#10b981', lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false });
+                const slope = (p2.low - p1.low) / (p2.index - p1.index);
+                const trendPoints = data.slice(p1.index).map((d, i) => ({ time: d.time, value: p1.low + slope * (p1.index + i - p1.index) }));
+                line.setData(trendPoints);
+                supportLinesRef.current.push(line);
+                if (!trendData) trendData = { type: 'support', slope, p2, trendPoints };
+            }
+            return trendData;
+        };
+
+        const checkSignals = (newCandle: any, trendData: any) => {
+            if (!trendData || !trendData.trendPoints) return;
+            const lastTrendPoint = trendData.trendPoints[trendData.trendPoints.length - 1];
+            if (!lastTrendPoint) return;
+
+            const lastMarker = markers[markers.length - 1];
+            const timeDiff = lastMarker ? (newCandle.time - lastMarker.time) : 1000000;
+
+            if (timeDiff >= GRANULARITY) {
+                if (trendData.type === 'resistance' && newCandle.close > lastTrendPoint.value) {
+                    markers.push({ time: newCandle.time, position: 'belowBar', color: '#10b981', shape: 'arrowUp', text: 'BUY' });
+                    (seriesRef.current as any).setMarkers([...markers]);
+                } else if (trendData.type === 'support' && newCandle.close < lastTrendPoint.value) {
+                    markers.push({ time: newCandle.time, position: 'aboveBar', color: '#ef4444', shape: 'arrowDown', text: 'SELL' });
+                    (seriesRef.current as any).setMarkers([...markers]);
+                }
+            }
+        };
 
         const socket = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
         socketRef.current = socket;
@@ -54,8 +133,8 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
                 subscribe: 1,
                 end: 'latest',
                 style: 'candles',
-                granularity: granularity,
-                count: 100
+                granularity: GRANULARITY,
+                count: 200
             }));
         };
 
@@ -70,6 +149,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
                     close: parseFloat(c.close)
                 }));
                 series.setData(allCandles);
+                updateTrendlines(allCandles);
             } else if (data.msg_type === "ohlc") {
                 const o = data.ohlc;
                 const newCandle = {
@@ -84,8 +164,10 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
                 if (lastIdx !== -1) allCandles[lastIdx] = newCandle;
                 else {
                     allCandles.push(newCandle);
-                    if (allCandles.length > 200) allCandles.shift();
+                    if (allCandles.length > 300) allCandles.shift();
                 }
+                const trendData = updateTrendlines(allCandles);
+                checkSignals(newCandle, trendData);
             }
         };
 
@@ -105,27 +187,25 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
             socket.close();
             chart.remove();
         };
-    }, [symbol, granularity]);
+    }, [symbol]);
 
     return (
-        <div className="relative w-full h-full group bg-[#0f172a]">
-            {/* Timeframe Picker */}
-            <div className="absolute top-4 left-4 z-50 flex gap-1 p-1 bg-slate-800/40 backdrop-blur-md rounded-xl border border-white/10 shadow-2xl">
-                {timeframes.map((tf) => (
-                    <button
-                        key={tf.value}
-                        onClick={() => setGranularity(tf.value)}
-                        className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 ${granularity === tf.value
-                            ? 'bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.5)]'
-                            : 'text-slate-400 hover:text-white hover:bg-white/5'
-                            }`}
-                    >
-                        {tf.label}
-                    </button>
-                ))}
+        <div className="relative w-full h-full group bg-[#020617] overflow-hidden flex flex-col">
+            {/* Simplified Header */}
+            <div className="absolute top-4 left-4 right-4 z-50 flex justify-between items-center pointer-events-none">
+                <div className="px-4 py-2 bg-slate-900/60 backdrop-blur-xl rounded-2xl border border-white/5 shadow-2xl flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-[10px] sm:text-xs font-black text-slate-200 uppercase tracking-[0.2em]">{symbol} • LIVE • M1</span>
+                    </div>
+                </div>
             </div>
 
-            <div ref={chartContainerRef} className="w-full h-full" />
+            <div ref={chartContainerRef} className="flex-1 w-full h-full" />
+
+            {/* Visual Decorative Blur */}
+            <div className="absolute -top-24 -left-24 w-64 h-64 bg-emerald-600/10 rounded-full blur-[120px] pointer-events-none" />
+            <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
         </div>
     );
 };
