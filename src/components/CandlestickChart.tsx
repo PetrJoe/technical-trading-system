@@ -19,8 +19,6 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
     // Refs for indicators
     const resistanceLinesRef = useRef<ISeriesApi<'Line'>[]>([]);
     const supportLinesRef = useRef<ISeriesApi<'Line'>[]>([]);
-    const fastEMARef = useRef<ISeriesApi<'Line'> | null>(null);
-    const slowEMARef = useRef<ISeriesApi<'Line'> | null>(null);
     const srLinesRef = useRef<any[]>([]); // To store price lines
 
     useEffect(() => {
@@ -46,30 +44,11 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
             wickUpColor: '#10b981', wickDownColor: '#ef4444',
         });
 
-        // Add EMA Series
-        const fastEMA = chart.addSeries(LineSeries, { color: '#fcd34d', lineWidth: 2, title: 'EMA 9', lastValueVisible: false, priceLineVisible: false });
-        const slowEMA = chart.addSeries(LineSeries, { color: '#818cf8', lineWidth: 2, title: 'EMA 21', lastValueVisible: false, priceLineVisible: false });
-
         chartRef.current = chart;
         seriesRef.current = series;
-        fastEMARef.current = fastEMA;
-        slowEMARef.current = slowEMA;
 
         let allCandles: any[] = [];
         let markers: any[] = [];
-
-        const calculateEMA = (data: any[], period: number) => {
-            const k = 2 / (period + 1);
-            let emaData = [];
-            let prevEMA = data[0].close;
-
-            for (let i = 0; i < data.length; i++) {
-                const currentEMA = (data[i].close - prevEMA) * k + prevEMA;
-                emaData.push({ time: data[i].time, value: currentEMA });
-                prevEMA = currentEMA;
-            }
-            return emaData;
-        };
 
         const findPivots = (data: any[]) => {
             const pivotHighs: any[] = [];
@@ -90,15 +69,9 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
         };
 
         const updateAnalysis = (data: any[]) => {
-            if (!chartRef.current || data.length < 22) return;
+            if (!chartRef.current || data.length < 10) return;
 
-            // 1. Moving Averages
-            const ema9 = calculateEMA(data, 9);
-            const ema21 = calculateEMA(data, 21);
-            fastEMARef.current?.setData(ema9);
-            slowEMARef.current?.setData(ema21);
-
-            // 2. Trendlines & S/R
+            // Trendlines & S/R
             const { pivotHighs, pivotLows } = findPivots(data);
 
             // Trendlines cleanup & logic
@@ -129,7 +102,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
                 if (!trendData) trendData = { type: 'support', slope, p2, trendPoints };
             }
 
-            // 3. Horizontal Support & Resistance
+            // Horizontal Support & Resistance
             // Clear old price lines
             srLinesRef.current.forEach(l => seriesRef.current?.removePriceLine(l));
             srLinesRef.current = [];
@@ -149,34 +122,17 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
                 srLinesRef.current.push(pl);
             }
 
-            return { trendData, ema9, ema21 };
+            return { trendData };
         };
 
         const checkSignals = (newCandle: any, analysis: any) => {
-            if (!analysis || !analysis.ema9 || !analysis.ema21) return;
-
-            const lastIdx = analysis.ema9.length - 1;
-            if (lastIdx < 1) return;
-
-            const currFast = analysis.ema9[lastIdx].value;
-            const prevFast = analysis.ema9[lastIdx - 1].value;
-            const currSlow = analysis.ema21[lastIdx].value;
-            const prevSlow = analysis.ema21[lastIdx - 1].value;
+            if (!analysis) return;
 
             const lastMarker = markers[markers.length - 1];
             const timeDiff = lastMarker ? (newCandle.time - lastMarker.time) : 1000000;
 
             if (timeDiff >= GRANULARITY) {
-                // EMA Crossover Signal
-                if (prevFast <= prevSlow && currFast > currSlow) {
-                    markers.push({ time: newCandle.time, position: 'belowBar', color: '#fcd34d', shape: 'arrowUp', text: 'EMA BUY' });
-                    (seriesRef.current as any).setMarkers([...markers]);
-                } else if (prevFast >= prevSlow && currFast < currSlow) {
-                    markers.push({ time: newCandle.time, position: 'aboveBar', color: '#818cf8', shape: 'arrowDown', text: 'EMA SELL' });
-                    (seriesRef.current as any).setMarkers([...markers]);
-                }
-
-                // Trendline Break Signal (Secondary)
+                // Trendline Break Signal
                 const trendData = analysis.trendData;
                 if (trendData && trendData.trendPoints) {
                     const lastTrend = trendData.trendPoints[trendData.trendPoints.length - 1];
@@ -259,14 +215,14 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
     return (
         <div className="relative w-full h-full group bg-[#020617] overflow-hidden flex flex-col">
             {/* Simplified Header */}
-            <div className="absolute top-4 left-4 right-4 z-50 flex justify-between items-center pointer-events-none">
+            {/* <div className="absolute top-4 left-4 right-4 z-50 flex justify-between items-center pointer-events-none">
                 <div className="px-4 py-2 bg-slate-900/60 backdrop-blur-xl rounded-2xl border border-white/5 shadow-2xl flex items-center gap-3">
                     <div className="flex items-center gap-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                         <span className="text-[10px] sm:text-xs font-black text-slate-200 uppercase tracking-[0.2em]">{symbol} • LIVE • M1</span>
                     </div>
                 </div>
-            </div>
+            </div> */}
 
             <div ref={chartContainerRef} className="flex-1 w-full h-full" />
 
