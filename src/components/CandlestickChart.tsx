@@ -16,9 +16,12 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
 
     const GRANULARITY = 60; // Fixed 1m
 
-    // Refs for trendlines
+    // Refs for indicators
     const resistanceLinesRef = useRef<ISeriesApi<'Line'>[]>([]);
     const supportLinesRef = useRef<ISeriesApi<'Line'>[]>([]);
+    const fastEMARef = useRef<ISeriesApi<'Line'> | null>(null);
+    const slowEMARef = useRef<ISeriesApi<'Line'> | null>(null);
+    const srLinesRef = useRef<any[]>([]); // To store price lines
 
     useEffect(() => {
         if (!chartContainerRef.current) return;
@@ -43,11 +46,30 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
             wickUpColor: '#10b981', wickDownColor: '#ef4444',
         });
 
+        // Add EMA Series
+        const fastEMA = chart.addSeries(LineSeries, { color: '#fcd34d', lineWidth: 2, title: 'EMA 9', lastValueVisible: false, priceLineVisible: false });
+        const slowEMA = chart.addSeries(LineSeries, { color: '#818cf8', lineWidth: 2, title: 'EMA 21', lastValueVisible: false, priceLineVisible: false });
+
         chartRef.current = chart;
         seriesRef.current = series;
+        fastEMARef.current = fastEMA;
+        slowEMARef.current = slowEMA;
 
         let allCandles: any[] = [];
         let markers: any[] = [];
+
+        const calculateEMA = (data: any[], period: number) => {
+            const k = 2 / (period + 1);
+            let emaData = [];
+            let prevEMA = data[0].close;
+
+            for (let i = 0; i < data.length; i++) {
+                const currentEMA = (data[i].close - prevEMA) * k + prevEMA;
+                emaData.push({ time: data[i].time, value: currentEMA });
+                prevEMA = currentEMA;
+            }
+            return emaData;
+        };
 
         const findPivots = (data: any[]) => {
             const pivotHighs: any[] = [];
@@ -67,19 +89,25 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
             return { pivotHighs, pivotLows };
         };
 
-        const updateTrendlines = (data: any[]) => {
-            if (!chartRef.current) return;
+        const updateAnalysis = (data: any[]) => {
+            if (!chartRef.current || data.length < 22) return;
+
+            // 1. Moving Averages
+            const ema9 = calculateEMA(data, 9);
+            const ema21 = calculateEMA(data, 21);
+            fastEMARef.current?.setData(ema9);
+            slowEMARef.current?.setData(ema21);
+
+            // 2. Trendlines & S/R
             const { pivotHighs, pivotLows } = findPivots(data);
 
-            // Cleanup
+            // Trendlines cleanup & logic
             resistanceLinesRef.current.forEach(l => chartRef.current?.removeSeries(l));
             supportLinesRef.current.forEach(l => chartRef.current?.removeSeries(l));
             resistanceLinesRef.current = [];
             supportLinesRef.current = [];
 
             let trendData: any = null;
-
-            // Draw Resistance (Pivots High)
             if (pivotHighs.length >= 2) {
                 const p1 = pivotHighs[pivotHighs.length - 2];
                 const p2 = pivotHighs[pivotHighs.length - 1];
@@ -90,8 +118,6 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
                 resistanceLinesRef.current.push(line);
                 trendData = { type: 'resistance', slope, p2, trendPoints };
             }
-
-            // Draw Support (Pivots Low)
             if (pivotLows.length >= 2) {
                 const p1 = pivotLows[pivotLows.length - 2];
                 const p2 = pivotLows[pivotLows.length - 1];
@@ -102,24 +128,65 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
                 supportLinesRef.current.push(line);
                 if (!trendData) trendData = { type: 'support', slope, p2, trendPoints };
             }
-            return trendData;
+
+            // 3. Horizontal Support & Resistance
+            // Clear old price lines
+            srLinesRef.current.forEach(l => seriesRef.current?.removePriceLine(l));
+            srLinesRef.current = [];
+
+            if (pivotHighs.length > 0) {
+                const lastHigh = pivotHighs[pivotHighs.length - 1];
+                const pl = (seriesRef.current as any).createPriceLine({
+                    price: lastHigh.high, color: '#f8717188', lineWidth: 1, lineStyle: 1, axisLabelVisible: true, title: 'RESISTANCE'
+                });
+                srLinesRef.current.push(pl);
+            }
+            if (pivotLows.length > 0) {
+                const lastLow = pivotLows[pivotLows.length - 1];
+                const pl = (seriesRef.current as any).createPriceLine({
+                    price: lastLow.low, color: '#34d39988', lineWidth: 1, lineStyle: 1, axisLabelVisible: true, title: 'SUPPORT'
+                });
+                srLinesRef.current.push(pl);
+            }
+
+            return { trendData, ema9, ema21 };
         };
 
-        const checkSignals = (newCandle: any, trendData: any) => {
-            if (!trendData || !trendData.trendPoints) return;
-            const lastTrendPoint = trendData.trendPoints[trendData.trendPoints.length - 1];
-            if (!lastTrendPoint) return;
+        const checkSignals = (newCandle: any, analysis: any) => {
+            if (!analysis || !analysis.ema9 || !analysis.ema21) return;
+
+            const lastIdx = analysis.ema9.length - 1;
+            if (lastIdx < 1) return;
+
+            const currFast = analysis.ema9[lastIdx].value;
+            const prevFast = analysis.ema9[lastIdx - 1].value;
+            const currSlow = analysis.ema21[lastIdx].value;
+            const prevSlow = analysis.ema21[lastIdx - 1].value;
 
             const lastMarker = markers[markers.length - 1];
             const timeDiff = lastMarker ? (newCandle.time - lastMarker.time) : 1000000;
 
             if (timeDiff >= GRANULARITY) {
-                if (trendData.type === 'resistance' && newCandle.close > lastTrendPoint.value) {
-                    markers.push({ time: newCandle.time, position: 'belowBar', color: '#10b981', shape: 'arrowUp', text: 'BUY' });
+                // EMA Crossover Signal
+                if (prevFast <= prevSlow && currFast > currSlow) {
+                    markers.push({ time: newCandle.time, position: 'belowBar', color: '#fcd34d', shape: 'arrowUp', text: 'EMA BUY' });
                     (seriesRef.current as any).setMarkers([...markers]);
-                } else if (trendData.type === 'support' && newCandle.close < lastTrendPoint.value) {
-                    markers.push({ time: newCandle.time, position: 'aboveBar', color: '#ef4444', shape: 'arrowDown', text: 'SELL' });
+                } else if (prevFast >= prevSlow && currFast < currSlow) {
+                    markers.push({ time: newCandle.time, position: 'aboveBar', color: '#818cf8', shape: 'arrowDown', text: 'EMA SELL' });
                     (seriesRef.current as any).setMarkers([...markers]);
+                }
+
+                // Trendline Break Signal (Secondary)
+                const trendData = analysis.trendData;
+                if (trendData && trendData.trendPoints) {
+                    const lastTrend = trendData.trendPoints[trendData.trendPoints.length - 1];
+                    if (trendData.type === 'resistance' && newCandle.close > lastTrend.value) {
+                        markers.push({ time: newCandle.time, position: 'belowBar', color: '#10b981', shape: 'arrowUp', text: 'BREAKOUT' });
+                        (seriesRef.current as any).setMarkers([...markers]);
+                    } else if (trendData.type === 'support' && newCandle.close < lastTrend.value) {
+                        markers.push({ time: newCandle.time, position: 'aboveBar', color: '#ef4444', shape: 'arrowDown', text: 'BREAKDOWN' });
+                        (seriesRef.current as any).setMarkers([...markers]);
+                    }
                 }
             }
         };
@@ -149,7 +216,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
                     close: parseFloat(c.close)
                 }));
                 series.setData(allCandles);
-                updateTrendlines(allCandles);
+                updateAnalysis(allCandles);
             } else if (data.msg_type === "ohlc") {
                 const o = data.ohlc;
                 const newCandle = {
@@ -166,8 +233,8 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
                     allCandles.push(newCandle);
                     if (allCandles.length > 300) allCandles.shift();
                 }
-                const trendData = updateTrendlines(allCandles);
-                checkSignals(newCandle, trendData);
+                const analysis = updateAnalysis(allCandles);
+                checkSignals(newCandle, analysis);
             }
         };
 
