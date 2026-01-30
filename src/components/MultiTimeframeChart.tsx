@@ -278,13 +278,11 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
         `${trendEmoji} ${trend.direction.toUpperCase()} (${(trend.strength * 100).toFixed(0)}%)`
       );
 
-      // Draw Fibonacci for 1H and M15
-      if (timeframe === '1H' || timeframe === 'M15') {
-        const trend = analyzeTrend(candles);
-        const fibData = getRecentFibonacci(candles, trend.direction);
-        if (fibData) {
-          drawFibonacci(fibData);
-        }
+      // Draw Fibonacci for all timeframes
+      const trendForFib = analyzeTrend(candles);
+      const fibData = getRecentFibonacci(candles, trendForFib.direction);
+      if (fibData) {
+        drawFibonacci(fibData);
       }
 
       // Draw S/R zones and SL/TP
