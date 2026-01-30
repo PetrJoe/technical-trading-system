@@ -224,7 +224,7 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
             price: zone.price,
             color,
             lineWidth: 2,
-            lineStyle: 1,
+            lineStyle: 0,
             axisLabelVisible: true,
             title: zone.type === 'support' ? 'S' : 'R',
             });
