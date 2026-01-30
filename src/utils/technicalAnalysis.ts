@@ -219,6 +219,58 @@ export function calculateRSI(candles: Candle[], period: number = 14): number | n
 }
 
 /**
+ * Calculate MACD (Moving Average Convergence Divergence)
+ */
+export function calculateMACD(
+  candles: Candle[],
+  fastPeriod: number = 12,
+  slowPeriod: number = 26,
+  signalPeriod: number = 9
+): { macd: number; signal: number; histogram: number } | null {
+  if (candles.length < slowPeriod + signalPeriod) return null;
+
+  const closePrices = candles.map((c) => c.close);
+
+  // Helper for EMA array
+  const calculateEMAArray = (values: number[], period: number): number[] => {
+    const k = 2 / (period + 1);
+    const emaArray: number[] = [];
+    let ema = values.slice(0, period).reduce((a, b) => a + b, 0) / period;
+    emaArray.push(ema);
+
+    for (let i = period; i < values.length; i++) {
+      ema = (values[i] - ema) * k + ema;
+      emaArray.push(ema);
+    }
+    return emaArray;
+  };
+
+  const fastEMA = calculateEMAArray(closePrices, fastPeriod);
+  const slowEMA = calculateEMAArray(closePrices, slowPeriod);
+
+  // Align EMAs
+  const macdLine: number[] = [];
+  const startIndex = slowPeriod - fastPeriod; // fastEMA is longer
+  for (let i = 0; i < slowEMA.length; i++) {
+    macdLine.push(fastEMA[i + startIndex] - slowEMA[i]);
+  }
+
+  // Calculate Signal Line (EMA of MACD Line)
+  const signalLine = calculateEMAArray(macdLine, signalPeriod);
+
+  // Get latest values
+  const currentMACD = macdLine[macdLine.length - 1];
+  const currentSignal = signalLine[signalLine.length - 1];
+  const currentHistogram = currentMACD - currentSignal;
+
+  return {
+    macd: currentMACD,
+    signal: currentSignal,
+    histogram: currentHistogram,
+  };
+}
+
+/**
  * Detect momentum (bullish/bearish)
  */
 export function detectMomentum(candles: Candle[]): 'bullish' | 'bearish' | 'neutral' {

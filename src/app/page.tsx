@@ -53,32 +53,51 @@ export default function Home() {
     <main className="h-screen bg-[#020617] p-2 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="mb-2 px-4 py-3 bg-gradient-to-r from-slate-900 to-slate-800 rounded-lg border border-slate-700 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          {latestSignal && (
-            <div
-              className={`px-6 py-3 rounded-lg border-2 ${
-                latestSignal.type === 'BUY'
-                  ? 'bg-emerald-500/20 border-emerald-500'
-                  : 'bg-red-500/20 border-red-500'
-              }`}
-            >
-              <div className="text-center">
-                <div
-                  className={`text-2xl font-black ${
-                    latestSignal.type === 'BUY' ? 'text-emerald-400' : 'text-red-400'
-                  }`}
-                >
-                  {latestSignal.type}
-                </div>
-                <div className="text-xs text-slate-300 mt-1">
-                  Confidence: {(latestSignal.confidence * 100).toFixed(0)}%
-                </div>
-                <div className="text-[10px] text-slate-400 mt-1">
-                  @ {latestSignal.price.toFixed(4)}
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center gap-4">
+            {latestSignal && (
+              <div
+                className={`px-6 py-3 rounded-lg border-2 ${
+                  latestSignal.type === 'BUY'
+                    ? 'bg-emerald-500/20 border-emerald-500'
+                    : 'bg-red-500/20 border-red-500'
+                }`}
+              >
+                <div className="text-center">
+                  <div
+                    className={`text-2xl font-black ${
+                      latestSignal.type === 'BUY' ? 'text-emerald-400' : 'text-red-400'
+                    }`}
+                  >
+                    {latestSignal.type}
+                  </div>
+                  <div className="text-xs text-slate-300 mt-1">
+                    Confidence: {(latestSignal.confidence * 100).toFixed(0)}%
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-1">
+                    @ {latestSignal.price.toFixed(4)}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+            
+            {/* Trade Management */}
+            {latestSignal && (
+              <div className="flex flex-col gap-2">
+                 <div className="px-4 py-2 bg-slate-800/50 rounded-lg border border-slate-700 flex items-center justify-between gap-4">
+                    <span className="text-xs font-bold text-slate-400">TP</span>
+                    <span className="text-sm font-mono text-emerald-400">{latestSignal.takeProfit.toFixed(4)}</span>
+                 </div>
+                 <div className="px-4 py-2 bg-slate-800/50 rounded-lg border border-slate-700 flex items-center justify-between gap-4">
+                    <span className="text-xs font-bold text-slate-400">SL</span>
+                    <span className="text-sm font-mono text-red-400">{latestSignal.stopLoss.toFixed(4)}</span>
+                 </div>
+                 <div className="text-[10px] text-slate-500 text-right">
+                    R:R {latestSignal.riskRewardRatio}
+                 </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Signal Details */}
@@ -106,7 +125,7 @@ export default function Home() {
         {/* Top Left - M1 Chart (Entry Timing) */}
         <div className="w-full h-full">
           <MultiTimeframeChart
-            symbol="R_75"
+            symbol="R_50"
             timeframe="M1"
             title="M1 - Entry/Exit Timing"
             onDataUpdate={(candles) => handleDataUpdate('M1', candles)}
@@ -117,7 +136,7 @@ export default function Home() {
         {/* Top Right - M5 Chart */}
         <div className="w-full h-full">
           <MultiTimeframeChart
-            symbol="R_75"
+            symbol="R_50"
             timeframe="M5"
             title="M5 - Momentum & Confirmation"
             onDataUpdate={(candles) => handleDataUpdate('M5', candles)}
@@ -128,7 +147,7 @@ export default function Home() {
         {/* Bottom Left - M15 Chart */}
         <div className="w-full h-full">
           <MultiTimeframeChart
-            symbol="R_75"
+            symbol="R_50"
             timeframe="M15"
             title="M15 - Market Structure"
             onDataUpdate={(candles) => handleDataUpdate('M15', candles)}
@@ -139,7 +158,7 @@ export default function Home() {
         {/* Bottom Right - 1H Chart (Primary Trend) */}
         <div className="w-full h-full">
           <MultiTimeframeChart
-            symbol="R_75"
+            symbol="R_50"
             timeframe="1H"
             title="1H - Primary Trend"
             onDataUpdate={(candles) => handleDataUpdate('1H', candles)}

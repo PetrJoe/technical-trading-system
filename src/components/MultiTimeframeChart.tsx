@@ -41,9 +41,61 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
   const socketRef = useRef<WebSocket | null>(null);
   const fibLinesRef = useRef<ISeriesApi<'Line'>[]>([]);
   const srLinesRef = useRef<any[]>([]);
+  const patternsRef = useRef<any[]>([]); // Store latest patterns
+  
+  // Refs for props to avoid effect re-runs
+  const latestSignals = useRef(signals);
+  const latestOnDataUpdate = useRef(onDataUpdate);
+
+  useEffect(() => {
+    latestSignals.current = signals;
+    latestOnDataUpdate.current = onDataUpdate;
+    
+    // Update markers whenever signals change
+    drawMarkers();
+  }, [signals, onDataUpdate]);
 
   const [trendInfo, setTrendInfo] = useState<string>('');
   const [fibInfo, setFibInfo] = useState<string>('');
+
+  const drawMarkers = () => {
+    if (!seriesRef.current) return;
+
+    let markers = [...patternsRef.current];
+    const signals = latestSignals.current;
+
+    // Add signal markers
+    if (signals.length > 0) {
+      const signalMarkers = signals.map((signal) => ({
+        time: signal.time as any,
+        position: (signal.type === 'BUY' ? 'belowBar' : 'aboveBar') as any,
+        color: signal.type === 'BUY' ? '#10b981' : '#ef4444',
+        shape: (signal.type === 'BUY' ? 'arrowUp' : 'arrowDown') as any,
+        text: `${signal.type} ${(signal.confidence * 100).toFixed(0)}%`,
+        size: 2,
+      }));
+      markers = [...markers, ...signalMarkers];
+    }
+
+    try {
+      (seriesRef.current as any).setMarkers(markers);
+    } catch (e) {
+      console.error('Error setting markers:', e);
+    }
+    
+    // Draw SL/TP lines
+    // Clear previous SL/TP lines that might be in srLinesRef (we need a better way to manage these if mixed)
+    // For now, let's assume srLinesRef handles all price lines and we clear them in drawSupportResistance.
+    // However, drawSupportResistance is called in updateAnalysis.
+    // If we call drawMarkers separately, we might need to manage SL/TP lines separately or re-draw all lines.
+    // Simpler approach: Let updateAnalysis handle everything, but trigger it? No, updateAnalysis needs candles.
+    
+    // Given the complexity, let's keep SL/TP drawing inside updateAnalysis for now, 
+    // or move it to a shared helper if we want instant updates on signal change.
+    // But since signals usually come from onDataUpdate -> parent -> signals prop, 
+    // the flow is: Data -> Parent -> Signals -> Chart.
+    // So when signals change, we SHOULD re-draw SL/TP.
+  };
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -97,7 +149,6 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
     seriesRef.current = series;
 
     let allCandles: Candle[] = [];
-    let markers: any[] = [];
 
     const drawFibonacci = (fibData: {
       levels: FibonacciLevel[];
@@ -106,7 +157,13 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
     }) => {
       // Clear existing Fibonacci lines
       fibLinesRef.current.forEach((line) => {
-        if (line) chartRef.current?.removeSeries(line);
+        if (line && chartRef.current) {
+            try {
+                chartRef.current.removeSeries(line);
+            } catch (e) {
+                console.warn('Error removing fib series:', e);
+            }
+        }
       });
       fibLinesRef.current = [];
 
@@ -115,14 +172,15 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
       // Draw Fibonacci levels
       const keyLevels = [38.2, 50, 61.8];
       levels.forEach((level) => {
+        if (!chartRef.current) return;
         const isKeyLevel = keyLevels.includes(level.level);
         const color = isKeyLevel ? '#fbbf24' : '#6b7280';
         const lineWidth = isKeyLevel ? 2 : 1;
 
-        const fibLine = chartRef.current!.addSeries(LineSeries, {
+        const fibLine = chartRef.current.addSeries(LineSeries, {
           color,
           lineWidth,
-          lineStyle: 2,
+          lineStyle: 0,
           lastValueVisible: false,
           priceLineVisible: false,
         });
@@ -146,23 +204,63 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
 
     const drawSupportResistance = (candles: Candle[]) => {
       // Clear existing S/R lines
-      srLinesRef.current.forEach((line) => seriesRef.current?.removePriceLine(line));
+      srLinesRef.current.forEach((line) => {
+          if (seriesRef.current) {
+              try {
+                  seriesRef.current.removePriceLine(line);
+              } catch (e) {
+                  console.warn('Error removing price line:', e);
+              }
+          }
+      });
       srLinesRef.current = [];
 
       const zones = findSupportResistanceZones(candles, 50);
 
-      zones.slice(0, 3).forEach((zone) => {
-        const color = zone.type === 'support' ? '#34d39955' : '#f8717155';
-        const priceLine = (seriesRef.current as any)!.createPriceLine({
-          price: zone.price,
-          color,
-          lineWidth: 2,
-          lineStyle: 1,
-          axisLabelVisible: true,
-          title: zone.type === 'support' ? 'S' : 'R',
+      if (seriesRef.current) {
+        zones.slice(0, 3).forEach((zone) => {
+            const color = zone.type === 'support' ? '#34d39955' : '#f8717155';
+            const priceLine = seriesRef.current!.createPriceLine({
+            price: zone.price,
+            color,
+            lineWidth: 2,
+            lineStyle: 1,
+            axisLabelVisible: true,
+            title: zone.type === 'support' ? 'S' : 'R',
+            });
+            srLinesRef.current.push(priceLine);
         });
-        srLinesRef.current.push(priceLine);
-      });
+      }
+      
+      // Draw SL/TP lines here too since we cleared srLinesRef
+      const signals = latestSignals.current;
+      if (signals.length > 0 && seriesRef.current) {
+        const latestSignal = signals[signals.length - 1];
+        // Only show SL/TP for recent signals (within last 10 candles)
+        const signalAge = candles.length > 0 ? candles[candles.length - 1].time - latestSignal.time : 10000;
+        
+        if (signalAge < 3600) { 
+            const tpLine = seriesRef.current.createPriceLine({
+                price: latestSignal.takeProfit,
+                color: '#10b981',
+                lineWidth: 1,
+                lineStyle: 0,
+                axisLabelVisible: true,
+                title: 'TP',
+            });
+            srLinesRef.current.push(tpLine);
+
+            const slLine = seriesRef.current.createPriceLine({
+                price: latestSignal.stopLoss,
+                color: '#ef4444',
+                lineWidth: 1,
+                lineStyle: 0,
+                axisLabelVisible: true,
+                title: 'SL',
+            });
+            srLinesRef.current.push(slLine);
+        }
+      }
     };
 
     const updateAnalysis = (candles: Candle[]) => {
@@ -189,7 +287,7 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
         }
       }
 
-      // Draw S/R zones
+      // Draw S/R zones and SL/TP
       drawSupportResistance(candles);
 
       // Detect patterns
@@ -204,29 +302,13 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
           shape: 'circle' as any,
           text: p.name,
         }));
-
-      markers = [...patternMarkers];
-
-      // Add signal markers
-      if (signals.length > 0) {
-        const signalMarkers = signals.map((signal) => ({
-          time: signal.time as any,
-          position: (signal.type === 'BUY' ? 'belowBar' : 'aboveBar') as any,
-          color: signal.type === 'BUY' ? '#10b981' : '#ef4444',
-          shape: (signal.type === 'BUY' ? 'arrowUp' : 'arrowDown') as any,
-          text: `${signal.type} ${(signal.confidence * 100).toFixed(0)}%`,
-          size: 2,
-        }));
-        markers = [...markers, ...signalMarkers];
-      }
-
-      if (seriesRef.current && markers.length > 0) {
-        (seriesRef.current as any).setMarkers(markers);
-      }
+      
+      patternsRef.current = patternMarkers;
+      drawMarkers();
 
       // Notify parent
-      if (onDataUpdate) {
-        onDataUpdate(candles);
+      if (latestOnDataUpdate.current) {
+        latestOnDataUpdate.current(candles);
       }
     };
 
@@ -304,7 +386,7 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
         chartRef.current.remove();
       }
     };
-  }, [symbol, timeframe, signals, onDataUpdate]);
+  }, [symbol, timeframe]);
 
   return (
     <div className="relative w-full h-full bg-[#020617] border border-slate-800 rounded-lg overflow-hidden">

@@ -1,7 +1,7 @@
 import { Candle, TradingSignal, FibonacciLevel } from './types';
 import { isAtKeyFibZone } from './fibonacci';
 import { detectCandlestickPatterns, getRecentSignificantPattern } from './candlestickPatterns';
-import { analyzeTrend, findSupportResistanceZones, isPriceNearZone, detectMomentum } from './technicalAnalysis';
+import { analyzeTrend, findSupportResistanceZones, isPriceNearZone, detectMomentum, calculateRSI, calculateATR, calculateMACD } from './technicalAnalysis';
 
 /**
  * Generate trading signals based on multi-timeframe analysis
@@ -72,18 +72,35 @@ export function generateTradingSignals(
   const recentPatternM1 = getRecentSignificantPattern(patternsM1);
   const recentPatternM5 = getRecentSignificantPattern(patternsM5);
 
-  // 7. Check momentum
+  // 7. Check momentum & Filters (RSI, MACD)
   const momentumM5 = detectMomentum(candlesM5);
   const momentumM1 = detectMomentum(candlesM1);
+  
+  // RSI Filter (M5)
+  const rsiM5 = calculateRSI(candlesM5, 14);
+  const isRSIOverbought = rsiM5 ? rsiM5 > 70 : false;
+  const isRSIOversold = rsiM5 ? rsiM5 < 30 : false;
+  
+  // MACD Confirmation (1H)
+  const macd1H = calculateMACD(candles1H);
+
+  // ATR for Risk Management (M15)
+  const atrM15 = calculateATR(candlesM15, 14) || 0.0010; // Default fallback
 
   // --- BUY SIGNAL CONDITIONS ---
-  if (trend1H.direction === 'bullish') {
+  if (trend1H.direction === 'bullish' && !isRSIOverbought) {
     const reasons: string[] = [];
     let confidence = 0;
 
     // Required: 1H bullish trend
     reasons.push('1H Bullish Trend');
     confidence += 0.2;
+
+    // MACD Confirmation
+    if (macd1H && macd1H.histogram > 0) {
+      reasons.push('1H MACD Bullish');
+      confidence += 0.1;
+    }
 
     // Fibonacci retracement at key level
     if (fibConfirmation) {
@@ -112,8 +129,18 @@ export function generateTradingSignals(
       confidence += 0.15;
     }
 
+    // RSI Check
+    if (rsiM5 && rsiM5 > 40 && rsiM5 < 60) {
+       // Sweet spot for continuation
+       reasons.push('RSI in Bullish Zone');
+       confidence += 0.05;
+    }
+
     // Generate BUY signal if confidence threshold met
     if (confidence >= 0.65 && reasons.length >= 3) {
+      const stopLoss = currentPrice - (1.5 * atrM15);
+      const takeProfit = currentPrice + (3.0 * atrM15);
+      
       signals.push({
         type: 'BUY',
         time: currentTime,
@@ -122,18 +149,27 @@ export function generateTradingSignals(
         reasons,
         fibLevel,
         pattern: recentPatternM1?.name || recentPatternM5?.name,
+        stopLoss,
+        takeProfit,
+        riskRewardRatio: 2.0
       });
     }
   }
 
   // --- SELL SIGNAL CONDITIONS ---
-  if (trend1H.direction === 'bearish') {
+  if (trend1H.direction === 'bearish' && !isRSIOversold) {
     const reasons: string[] = [];
     let confidence = 0;
 
     // Required: 1H bearish trend
     reasons.push('1H Bearish Trend');
     confidence += 0.2;
+
+    // MACD Confirmation
+    if (macd1H && macd1H.histogram < 0) {
+      reasons.push('1H MACD Bearish');
+      confidence += 0.1;
+    }
 
     // Fibonacci retracement at key level
     if (fibConfirmation) {
@@ -162,8 +198,18 @@ export function generateTradingSignals(
       confidence += 0.15;
     }
 
+    // RSI Check
+    if (rsiM5 && rsiM5 > 40 && rsiM5 < 60) {
+       // Sweet spot for continuation
+       reasons.push('RSI in Bearish Zone');
+       confidence += 0.05;
+    }
+
     // Generate SELL signal if confidence threshold met
     if (confidence >= 0.65 && reasons.length >= 3) {
+      const stopLoss = currentPrice + (1.5 * atrM15);
+      const takeProfit = currentPrice - (3.0 * atrM15);
+
       signals.push({
         type: 'SELL',
         time: currentTime,
@@ -172,6 +218,9 @@ export function generateTradingSignals(
         reasons,
         fibLevel,
         pattern: recentPatternM1?.name || recentPatternM5?.name,
+        stopLoss,
+        takeProfit,
+        riskRewardRatio: 2.0
       });
     }
   }

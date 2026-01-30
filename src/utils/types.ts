@@ -45,6 +45,9 @@ export interface TradingSignal {
   reasons: string[];
   fibLevel?: number;
   pattern?: string;
+  stopLoss: number;
+  takeProfit: number;
+  riskRewardRatio: number;
 }
 
 export type Timeframe = 'M1' | 'M5' | 'M15' | '1H';
