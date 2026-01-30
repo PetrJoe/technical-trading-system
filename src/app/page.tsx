@@ -103,32 +103,21 @@ export default function Home() {
 
       {/* 4-Chart Grid */}
       <div className="grid grid-cols-2 grid-rows-2 gap-2 flex-1 min-h-0">
-        {/* Top Left - 1H Chart (Primary Trend) */}
+        {/* Top Left - M1 Chart (Entry Timing) */}
         <div className="w-full h-full">
           <MultiTimeframeChart
-            symbol="R_50"
-            timeframe="1H"
-            title="1H - Primary Trend"
-            onDataUpdate={(candles) => handleDataUpdate('1H', candles)}
+            symbol="R_75"
+            timeframe="M1"
+            title="M1 - Entry/Exit Timing"
+            onDataUpdate={(candles) => handleDataUpdate('M1', candles)}
             signals={signals}
           />
         </div>
 
-        {/* Top Right - M15 Chart */}
+        {/* Top Right - M5 Chart */}
         <div className="w-full h-full">
           <MultiTimeframeChart
-            symbol="R_50"
-            timeframe="M15"
-            title="M15 - Market Structure"
-            onDataUpdate={(candles) => handleDataUpdate('M15', candles)}
-            signals={signals}
-          />
-        </div>
-
-        {/* Bottom Left - M5 Chart */}
-        <div className="w-full h-full">
-          <MultiTimeframeChart
-            symbol="R_50"
+            symbol="R_75"
             timeframe="M5"
             title="M5 - Momentum & Confirmation"
             onDataUpdate={(candles) => handleDataUpdate('M5', candles)}
@@ -136,13 +125,24 @@ export default function Home() {
           />
         </div>
 
-        {/* Bottom Right - M1 Chart (Entry Timing) */}
+        {/* Bottom Left - M15 Chart */}
         <div className="w-full h-full">
           <MultiTimeframeChart
-            symbol="R_50"
-            timeframe="M1"
-            title="M1 - Entry/Exit Timing"
-            onDataUpdate={(candles) => handleDataUpdate('M1', candles)}
+            symbol="R_75"
+            timeframe="M15"
+            title="M15 - Market Structure"
+            onDataUpdate={(candles) => handleDataUpdate('M15', candles)}
+            signals={signals}
+          />
+        </div>
+
+        {/* Bottom Right - 1H Chart (Primary Trend) */}
+        <div className="w-full h-full">
+          <MultiTimeframeChart
+            symbol="R_75"
+            timeframe="1H"
+            title="1H - Primary Trend"
+            onDataUpdate={(candles) => handleDataUpdate('1H', candles)}
             signals={signals}
           />
         </div>
