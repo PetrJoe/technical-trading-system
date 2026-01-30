@@ -12,6 +12,7 @@ import { Candle, Timeframe, FibonacciLevel, TradingSignal } from '@/utils/types'
 import { getRecentFibonacci } from '@/utils/fibonacci';
 import { analyzeTrend, findSupportResistanceZones } from '@/utils/technicalAnalysis';
 import { detectCandlestickPatterns } from '@/utils/candlestickPatterns';
+import WebSocketService from '@/services/WebSocketService';
 
 interface MultiTimeframeChartProps {
   symbol?: string;
@@ -38,7 +39,6 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
   const fibLinesRef = useRef<ISeriesApi<'Line'>[]>([]);
   const srLinesRef = useRef<any[]>([]);
   const patternsRef = useRef<any[]>([]); // Store latest patterns
@@ -312,26 +312,9 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
       }
     };
 
-    const socket = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
-    socketRef.current = socket;
+    const handleDataMessage = (data: any) => {
+      if (!series) return;
 
-    socket.onopen = () => {
-      const granularity = GRANULARITY_MAP[timeframe];
-      socket.send(
-        JSON.stringify({
-          ticks_history: symbol,
-          subscribe: 1,
-          end: 'latest',
-          style: 'candles',
-          granularity,
-          count: timeframe === '1H' ? 100 : 200,
-        })
-      );
-    };
-
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      
       if (data.msg_type === 'candles') {
         allCandles = data.candles.map((c: any) => ({
           time: Number(c.epoch),
@@ -366,6 +349,11 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
       }
     };
 
+    const wsService = WebSocketService.getInstance();
+    const granularity = GRANULARITY_MAP[timeframe];
+    
+    wsService.subscribe(symbol, timeframe, granularity, handleDataMessage);
+
     const handleResize = () => {
       if (chartContainerRef.current && chartRef.current) {
         chartRef.current.applyOptions({
@@ -379,9 +367,7 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      if (socketRef.current) {
-        socketRef.current.close();
-      }
+      wsService.unsubscribe(symbol, granularity, handleDataMessage);
       if (chartRef.current) {
         chartRef.current.remove();
       }
