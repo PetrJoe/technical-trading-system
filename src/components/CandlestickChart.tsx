@@ -2,13 +2,12 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, IChartApi, ISeriesApi, CandlestickSeries, LineSeries } from 'lightweight-charts';
-import { ChevronDown, BarChart2 } from 'lucide-react';
 
 interface CandlestickChartProps {
     symbol?: string;
 }
 
-const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) => {
+const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_50' }) => {
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -33,6 +32,25 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_75' }) 
                 timeVisible: true,
                 secondsVisible: true,
                 borderVisible: false,
+                tickMarkFormatter: (time: number) => {
+                    const date = new Date(time * 1000);
+                    return date.toLocaleTimeString([], { 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        hour12: false 
+                    });
+                },
+            },
+            localization: {
+                timeFormatter: (time: number) => {
+                    const date = new Date(time * 1000);
+                    return date.toLocaleTimeString([], { 
+                        hour: '2-digit', 
+                        minute: '2-digit', 
+                        second: '2-digit',
+                        hour12: false 
+                    });
+                },
             },
             rightPriceScale: {
                 borderVisible: false,

@@ -136,7 +136,7 @@ When a high-probability trading opportunity is detected:
 
 Edit the symbol in `page.tsx`:
 ```typescript
-symbol="R_75"  // Change to any Deriv symbol
+symbol="R_50"  // Change to any Deriv symbol
 ```
 
 ## 🚀 Build for Production

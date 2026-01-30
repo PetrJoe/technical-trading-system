@@ -106,7 +106,7 @@ export default function Home() {
         {/* Top Left - 1H Chart (Primary Trend) */}
         <div className="w-full h-full">
           <MultiTimeframeChart
-            symbol="R_75"
+            symbol="R_50"
             timeframe="1H"
             title="1H - Primary Trend"
             onDataUpdate={(candles) => handleDataUpdate('1H', candles)}
@@ -117,7 +117,7 @@ export default function Home() {
         {/* Top Right - M15 Chart */}
         <div className="w-full h-full">
           <MultiTimeframeChart
-            symbol="R_75"
+            symbol="R_50"
             timeframe="M15"
             title="M15 - Market Structure"
             onDataUpdate={(candles) => handleDataUpdate('M15', candles)}
@@ -128,7 +128,7 @@ export default function Home() {
         {/* Bottom Left - M5 Chart */}
         <div className="w-full h-full">
           <MultiTimeframeChart
-            symbol="R_75"
+            symbol="R_50"
             timeframe="M5"
             title="M5 - Momentum & Confirmation"
             onDataUpdate={(candles) => handleDataUpdate('M5', candles)}
@@ -139,7 +139,7 @@ export default function Home() {
         {/* Bottom Right - M1 Chart (Entry Timing) */}
         <div className="w-full h-full">
           <MultiTimeframeChart
-            symbol="R_75"
+            symbol="R_50"
             timeframe="M1"
             title="M1 - Entry/Exit Timing"
             onDataUpdate={(candles) => handleDataUpdate('M1', candles)}

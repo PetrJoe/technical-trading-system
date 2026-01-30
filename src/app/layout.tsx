@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Deriv R_75 Live Candlestick Chart",
-  description: "Live real-time candlestick chart for Deriv R_75 index using Lightweight Charts and Next.js",
+  title: "Deriv R_50 Live Candlestick Chart",
+  description: "Live real-time candlestick chart for Deriv R_50 index using Lightweight Charts and Next.js",
 };
 
 export default function RootLayout({

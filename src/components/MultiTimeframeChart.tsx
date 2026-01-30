@@ -29,7 +29,7 @@ const GRANULARITY_MAP: Record<Timeframe, number> = {
 };
 
 const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
-  symbol = 'R_75',
+  symbol = 'R_50',
   timeframe,
   title,
   onDataUpdate,
@@ -60,6 +60,25 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
         timeVisible: true,
         secondsVisible: timeframe === 'M1',
         borderVisible: false,
+        tickMarkFormatter: (time: number) => {
+          const date = new Date(time * 1000);
+          return date.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          });
+        },
+      },
+      localization: {
+        timeFormatter: (time: number) => {
+          const date = new Date(time * 1000);
+          return date.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+          });
+        },
       },
       rightPriceScale: {
         borderVisible: false,
