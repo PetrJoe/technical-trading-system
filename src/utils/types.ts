@@ -38,7 +38,7 @@ export interface TrendInfo {
 }
 
 export interface TradingSignal {
-  type: 'BUY' | 'SELL';
+  type: 'BUY' | 'SELL' | 'WAIT';
   time: number;
   price: number;
   confidence: number;

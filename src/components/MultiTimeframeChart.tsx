@@ -10,7 +10,7 @@ import {
 } from 'lightweight-charts';
 import { Candle, Timeframe, FibonacciLevel, TradingSignal } from '@/utils/types';
 import { getRecentFibonacci } from '@/utils/fibonacci';
-import { analyzeTrend, findSupportResistanceZones } from '@/utils/technicalAnalysis';
+import { analyzeTrend, analyzeTrendBias, findSupportResistanceZones } from '@/utils/technicalAnalysis';
 import { detectCandlestickPatterns } from '@/utils/candlestickPatterns';
 import WebSocketService from '@/services/WebSocketService';
 
@@ -78,7 +78,9 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
     }
 
     try {
-      (seriesRef.current as any).setMarkers(markers);
+      if (seriesRef.current && typeof (seriesRef.current as any).setMarkers === 'function') {
+        (seriesRef.current as any).setMarkers(markers);
+      }
     } catch (e) {
       console.error('Error setting markers:', e);
     }
@@ -265,15 +267,27 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
       if (candles.length < 20) return;
 
       // Analyze trend
-      const trend = analyzeTrend(candles);
+      let trendDirection = 'sideways';
+      let trendStrength = 0;
+
+      if (timeframe === '1H') {
+         const bias = analyzeTrendBias(candles);
+         trendDirection = bias === 'range' ? 'sideways' : bias;
+         trendStrength = 1;
+      } else {
+         const trend = analyzeTrend(candles);
+         trendDirection = trend.direction;
+         trendStrength = trend.strength;
+      }
+
       const trendEmoji =
-        trend.direction === 'bullish'
+        trendDirection === 'bullish'
           ? '📈'
-          : trend.direction === 'bearish'
+          : trendDirection === 'bearish'
           ? '📉'
           : '➡️';
       setTrendInfo(
-        `${trendEmoji} ${trend.direction.toUpperCase()} (${(trend.strength * 100).toFixed(0)}%)`
+        `${trendEmoji} ${trendDirection.toUpperCase()} (${(trendStrength * 100).toFixed(0)}%)`
       );
 
       // Draw Fibonacci for all timeframes
@@ -366,7 +380,11 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
       wsService.unsubscribe(symbol, granularity, handleDataMessage);
       if (chartRef.current) {
         chartRef.current.remove();
+        chartRef.current = null;
       }
+      seriesRef.current = null;
+      fibLinesRef.current = [];
+      srLinesRef.current = [];
     };
   }, [symbol, timeframe]);
 

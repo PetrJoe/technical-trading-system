@@ -70,6 +70,27 @@ export function analyzeTrend(candles: Candle[]): TrendInfo {
 }
 
 /**
+ * Analyze trend bias specifically for H1 strategy (EMA 50 & 200)
+ */
+export function analyzeTrendBias(candles: Candle[]): 'bullish' | 'bearish' | 'range' {
+  if (candles.length < 200) return 'range';
+
+  const ema50 = calculateEMA(candles, 50);
+  const ema200 = calculateEMA(candles, 200);
+  const currentPrice = candles[candles.length - 1].close;
+
+  if (!ema50 || !ema200) return 'range';
+
+  if (ema50 > ema200 && currentPrice > ema50 && currentPrice > ema200) {
+    return 'bullish';
+  } else if (ema50 < ema200 && currentPrice < ema50 && currentPrice < ema200) {
+    return 'bearish';
+  }
+  
+  return 'range';
+}
+
+/**
  * Find support and resistance zones using pivot points
  */
 export function findSupportResistanceZones(

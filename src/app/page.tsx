@@ -60,13 +60,15 @@ export default function Home() {
                 className={`px-6 py-3 rounded-lg border-2 ${
                   latestSignal.type === 'BUY'
                     ? 'bg-emerald-500/20 border-emerald-500'
-                    : 'bg-red-500/20 border-red-500'
+                    : latestSignal.type === 'SELL'
+                    ? 'bg-red-500/20 border-red-500'
+                    : 'bg-slate-500/20 border-slate-500'
                 }`}
               >
                 <div className="text-center">
                   <div
                     className={`text-2xl font-black ${
-                      latestSignal.type === 'BUY' ? 'text-emerald-400' : 'text-red-400'
+                      latestSignal.type === 'BUY' ? 'text-emerald-400' : latestSignal.type === 'SELL' ? 'text-red-400' : 'text-slate-400'
                     }`}
                   >
                     {latestSignal.type}
