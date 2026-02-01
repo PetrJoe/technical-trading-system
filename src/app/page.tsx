@@ -1,9 +1,14 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import MultiTimeframeChart from '@/components/MultiTimeframeChart';
+import dynamic from 'next/dynamic';
 import { Candle, TradingSignal } from '@/utils/types';
 import { generateTradingSignals } from '@/utils/signalGenerator';
+
+const MultiTimeframeChart = dynamic(() => import('@/components/MultiTimeframeChart'), {
+  ssr: false,
+  loading: () => <div className="w-full h-full bg-[#020617] animate-pulse rounded-lg border border-slate-800" />
+});
 
 export default function Home() {
   const [candlesM1, setCandlesM1] = useState<Candle[]>([]);
