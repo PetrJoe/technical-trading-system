@@ -16,9 +16,9 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_50' }) 
     const GRANULARITY = 60; // Fixed 1m
 
     // Refs for indicators
-    const resistanceLinesRef = useRef<ISeriesApi<'Line'>[]>([]);
-    const supportLinesRef = useRef<ISeriesApi<'Line'>[]>([]);
-    const srLinesRef = useRef<any[]>([]); // To store price lines
+        // const resistanceLinesRef = useRef<ISeriesApi<'Line'>[]>([]);
+        // const supportLinesRef = useRef<ISeriesApi<'Line'>[]>([]);
+        // const srLinesRef = useRef<any[]>([]); // To store price lines (commented out for enhanced multi-timeframe logic)
 
     useEffect(() => {
         if (!chartContainerRef.current) return;
@@ -68,79 +68,10 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_50' }) 
         let allCandles: any[] = [];
         let markers: any[] = [];
 
-        const findPivots = (data: any[]) => {
-            const pivotHighs: any[] = [];
-            const pivotLows: any[] = [];
-            const window = 5;
-
-            for (let i = window; i < data.length - window; i++) {
-                const current = data[i];
-                let isHigh = true, isLow = true;
-                for (let j = 1; j <= window; j++) {
-                    if (data[i - j].high >= current.high || data[i + j].high > current.high) isHigh = false;
-                    if (data[i - j].low <= current.low || data[i + j].low < current.low) isLow = false;
-                }
-                if (isHigh) pivotHighs.push({ ...current, index: i });
-                if (isLow) pivotLows.push({ ...current, index: i });
-            }
-            return { pivotHighs, pivotLows };
-        };
-
         const updateAnalysis = (data: any[]) => {
-            if (!chartRef.current || data.length < 10) return;
-
-            // Trendlines & S/R
-            const { pivotHighs, pivotLows } = findPivots(data);
-
-            // Trendlines cleanup & logic
-            resistanceLinesRef.current.forEach(l => chartRef.current?.removeSeries(l));
-            supportLinesRef.current.forEach(l => chartRef.current?.removeSeries(l));
-            resistanceLinesRef.current = [];
-            supportLinesRef.current = [];
-
-            let trendData: any = null;
-            if (pivotHighs.length >= 2) {
-                const p1 = pivotHighs[pivotHighs.length - 2];
-                const p2 = pivotHighs[pivotHighs.length - 1];
-                const line = chartRef.current.addSeries(LineSeries, { color: '#ef4444', lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false });
-                const slope = (p2.high - p1.high) / (p2.index - p1.index);
-                const trendPoints = data.slice(p1.index).map((d, i) => ({ time: d.time, value: p1.high + slope * (p1.index + i - p1.index) }));
-                line.setData(trendPoints);
-                resistanceLinesRef.current.push(line);
-                trendData = { type: 'resistance', slope, p2, trendPoints };
-            }
-            if (pivotLows.length >= 2) {
-                const p1 = pivotLows[pivotLows.length - 2];
-                const p2 = pivotLows[pivotLows.length - 1];
-                const line = chartRef.current.addSeries(LineSeries, { color: '#10b981', lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false });
-                const slope = (p2.low - p1.low) / (p2.index - p1.index);
-                const trendPoints = data.slice(p1.index).map((d, i) => ({ time: d.time, value: p1.low + slope * (p1.index + i - p1.index) }));
-                line.setData(trendPoints);
-                supportLinesRef.current.push(line);
-                if (!trendData) trendData = { type: 'support', slope, p2, trendPoints };
-            }
-
-            // Horizontal Support & Resistance
-            // Clear old price lines
-            srLinesRef.current.forEach(l => seriesRef.current?.removePriceLine(l));
-            srLinesRef.current = [];
-
-            if (pivotHighs.length > 0) {
-                const lastHigh = pivotHighs[pivotHighs.length - 1];
-                const pl = (seriesRef.current as any).createPriceLine({
-                    price: lastHigh.high, color: '#f8717188', lineWidth: 1, lineStyle: 1, axisLabelVisible: true, title: 'RESISTANCE'
-                });
-                srLinesRef.current.push(pl);
-            }
-            if (pivotLows.length > 0) {
-                const lastLow = pivotLows[pivotLows.length - 1];
-                const pl = (seriesRef.current as any).createPriceLine({
-                    price: lastLow.low, color: '#34d39988', lineWidth: 1, lineStyle: 1, axisLabelVisible: true, title: 'SUPPORT'
-                });
-                srLinesRef.current.push(pl);
-            }
-
-            return { trendData };
+            if (!chartRef.current || data.length === 0) return null;
+            // Indicator logic removed for streamlined chart; return null to skip marker updates
+            return null;
         };
 
         const checkSignals = (newCandle: any, analysis: any) => {

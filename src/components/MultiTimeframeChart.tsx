@@ -105,13 +105,11 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
       grid: {
         vertLines: { color: '#0f172a' },
         horzLines: { color: '#0f172a' },
+        // ...existing code...
       },
       width: chartContainerRef.current.clientWidth,
       height: chartContainerRef.current.clientHeight,
       timeScale: {
-        timeVisible: true,
-        secondsVisible: timeframe === 'M1',
-        borderVisible: false,
         tickMarkFormatter: (time: number) => {
           const date = new Date(time * 1000);
           return date.toLocaleTimeString([], {
@@ -374,7 +372,7 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
 
   return (
     <div className="relative w-full h-full bg-[#020617] border border-slate-800 rounded-lg overflow-hidden">
-      {/* Header */}
+      {/* Enhanced Multi-Timeframe Overlays */}
       <div className="absolute top-2 left-2 right-2 z-10 flex justify-between items-start pointer-events-none">
         <div className="flex flex-col gap-1">
           <div className="px-3 py-1.5 bg-slate-900/80 backdrop-blur-sm rounded-lg border border-white/10">
@@ -382,14 +380,34 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
               {title}
             </span>
           </div>
-          {trendInfo && (
+          {/* H1 Trend Label */}
+          {timeframe === '1H' && trendInfo && (
             <div className="px-3 py-1 bg-slate-900/80 backdrop-blur-sm rounded-lg border border-white/10">
-              <span className="text-[10px] font-medium text-slate-300">
-                {trendInfo}
+              <span className="text-[10px] font-bold uppercase" style={{ color: trendInfo.includes('BULLISH') ? '#10b981' : trendInfo.includes('BEARISH') ? '#ef4444' : '#fbbf24' }}>
+                {trendInfo.replace('📈', 'Bullish').replace('📉', 'Bearish').replace('➡️', 'Range')}
               </span>
             </div>
           )}
+          {/* M15 Setup Zone Label */}
+          {timeframe === 'M15' && (
+            <div className="px-3 py-1 bg-blue-500/10 backdrop-blur-sm rounded-lg border border-blue-500/30">
+              <span className="text-[10px] font-bold text-blue-300">Setup Zone</span>
+            </div>
+          )}
+          {/* M5 Confirmation Label */}
+          {timeframe === 'M5' && (
+            <div className="px-3 py-1 bg-emerald-500/10 backdrop-blur-sm rounded-lg border border-emerald-500/30">
+              <span className="text-[10px] font-bold text-emerald-300">Entry Confirmation</span>
+            </div>
+          )}
+          {/* M1 Entry Label */}
+          {timeframe === 'M1' && (
+            <div className="px-3 py-1 bg-amber-500/10 backdrop-blur-sm rounded-lg border border-amber-500/30">
+              <span className="text-[10px] font-bold text-amber-300">Precision Entry</span>
+            </div>
+          )}
         </div>
+        {/* Fibonacci Info (all timeframes) */}
         {fibInfo && (
           <div className="px-3 py-1 bg-amber-500/10 backdrop-blur-sm rounded-lg border border-amber-500/30 max-w-xs">
             <span className="text-[9px] font-medium text-amber-200">
@@ -401,6 +419,52 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
 
       {/* Chart */}
       <div ref={chartContainerRef} className="w-full h-full" />
+
+      {/* Signal Info Box at Bottom of Each Chart */}
+      {signals && signals.length > 0 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+          {(() => {
+            const latest = signals[signals.length - 1];
+            return (
+              <div
+                className={`flex flex-col items-center px-6 py-5 rounded-2xl shadow-2xl border-4 w-48 sm:w-56 md:w-64 pointer-events-auto
+                  ${
+                    latest.type === 'BUY'
+                      ? 'bg-emerald-700/90 border-emerald-400'
+                      : latest.type === 'SELL'
+                      ? 'bg-red-700/90 border-red-400'
+                      : 'bg-slate-700/90 border-slate-400'
+                  }
+                `}
+              >
+                <div className="text-2xl font-black text-white mb-2 tracking-wider">
+                  {latest.type === 'BUY' ? '🟢 BUY' : latest.type === 'SELL' ? '🔴 SELL' : '⚪ WAIT'}
+                </div>
+                <div className="flex flex-col items-center w-full gap-1">
+                  <div className="text-xs font-semibold text-slate-200">Confidence</div>
+                  <div className="text-lg font-bold text-slate-100">{(latest.confidence * 100).toFixed(0)}%</div>
+                </div>
+                <div className="flex flex-col items-center w-full gap-1 mt-2">
+                  <div className="text-xs font-semibold text-slate-200">@ Price</div>
+                  <div className="text-base font-mono text-slate-100">{latest.price.toFixed(4)}</div>
+                </div>
+                <div className="flex flex-col items-center w-full gap-1 mt-2">
+                  <div className="text-xs font-semibold text-emerald-200">TP</div>
+                  <div className="text-base font-mono text-emerald-200">{latest.takeProfit.toFixed(4)}</div>
+                </div>
+                <div className="flex flex-col items-center w-full gap-1 mt-2">
+                  <div className="text-xs font-semibold text-red-200">SL</div>
+                  <div className="text-base font-mono text-red-200">{latest.stopLoss.toFixed(4)}</div>
+                </div>
+                <div className="flex flex-col items-center w-full gap-1 mt-2">
+                  <div className="text-xs font-semibold text-slate-200">R:R</div>
+                  <div className="text-base font-bold text-slate-100">{latest.riskRewardRatio}</div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
     </div>
   );
 };
