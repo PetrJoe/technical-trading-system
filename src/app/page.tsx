@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { Candle } from '@/utils/types';
-import { analyzeH1, analyzeM15, analyzeM5, analyzeM1 } from '@/utils/technicalAnalysis';
+import { analyzeH1 } from '@/utils/technicalAnalysis';
 import Dashboard from '@/components/Dashboard';
 import './Home.css';
 
@@ -24,21 +24,6 @@ export default function Home() {
     return analyzeH1(candles1H);
   }, [candles1H]);
 
-  const m15Analysis = useMemo(() => {
-    if (candlesM15.length < 50) return { status: 'WAIT' as const };
-    return analyzeM15(candlesM15, h1Analysis.bias, h1Analysis.zones);
-  }, [candlesM15, h1Analysis]);
-
-  const m5Analysis = useMemo(() => {
-    if (candlesM5.length < 20) return { confirmation: 'NO CONFIRMATION' as const };
-    return analyzeM5(candlesM5, h1Analysis.bias);
-  }, [candlesM5, h1Analysis.bias]);
-
-  const m1Analysis = useMemo(() => {
-    if (candlesM1.length < 10) return { trigger: 'WAIT' as const };
-    return analyzeM1(candlesM1, m5Analysis.confirmation);
-  }, [candlesM1, m5Analysis.confirmation]);
-
   const handleDataUpdate = useCallback(
     (timeframe: string, candles: Candle[]) => {
       // Update candle data for each timeframe
@@ -46,14 +31,8 @@ export default function Home() {
       else if (timeframe === 'M5') setCandlesM5(candles);
       else if (timeframe === 'M15') setCandlesM15(candles);
       else if (timeframe === '1H') setCandles1H(candles);
-
-      // Use the latest data for signal generation (including the update we just received)
-      const currentM1 = timeframe === 'M1' ? candles : candlesM1;
-      const currentM5 = timeframe === 'M5' ? candles : candlesM5;
-      const currentM15 = timeframe === 'M15' ? candles : candlesM15;
-      const current1H = timeframe === '1H' ? candles : candles1H;
     },
-    [candlesM1, candlesM5, candlesM15, candles1H]
+    []
   );
 
   return (
@@ -61,9 +40,6 @@ export default function Home() {
       {/* Dashboard Bar */}
       <Dashboard
         h1Bias={h1Analysis.bias}
-        m15Status={m15Analysis.status}
-        m5Confirmation={m5Analysis.confirmation}
-        m1Trigger={m1Analysis.trigger}
       />
 
       {/* 4-Chart Grid */}
