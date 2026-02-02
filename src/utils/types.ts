@@ -50,6 +50,22 @@ export interface TradingSignal {
   riskRewardRatio: number;
 }
 
+export interface MarketAnalysis {
+  h1: {
+    trend: 'BULLISH' | 'BEARISH' | 'RANGE';
+    bias: string;
+  };
+  m15: {
+    setup: 'VALID' | 'WAIT' | 'INVALID';
+    zone: string;
+  };
+  m5: {
+    confirmation: 'BUY BIAS' | 'SELL BIAS' | 'NO CONFIRMATION';
+    signal: string;
+  };
+  timestamp: number;
+}
+
 export type Timeframe = 'M1' | 'M5' | 'M15' | '1H';
 
 export const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
