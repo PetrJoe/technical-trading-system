@@ -38,7 +38,8 @@ export function generateTradingSignals(
 
   // 3. Analyze M15 and M5 for structure confirmation
   const trendM15 = analyzeTrend(candlesM15);
-  const trendM5 = analyzeTrend(candlesM5);
+  // trendM5 is not used in the logic below
+  // const trendM5 = analyzeTrend(candlesM5);
   
   // Trends should align
   const trendsAlign =

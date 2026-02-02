@@ -58,3 +58,29 @@ export const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
   M15: 900,
   '1H': 3600,
 };
+
+export interface WebSocketMessage {
+  msg_type: string;
+  echo_req?: {
+    ticks_history?: string;
+    granularity?: number;
+    [key: string]: unknown;
+  };
+  ohlc?: {
+    symbol: string;
+    granularity: number;
+    open_time: number | string;
+    open: string;
+    high: string;
+    low: string;
+    close: string;
+  };
+  candles?: Array<{
+    epoch: number | string;
+    open: string;
+    high: string;
+    low: string;
+    close: string;
+  }>;
+  [key: string]: unknown;
+}

@@ -1,12 +1,12 @@
-import { Timeframe } from '@/utils/types';
+import { Timeframe, WebSocketMessage } from '@/utils/types';
 
-type DataCallback = (data: any) => void;
+type DataCallback = (data: WebSocketMessage) => void;
 
 class WebSocketService {
   private static instance: WebSocketService;
   private socket: WebSocket | null = null;
   private subscribers: Map<string, Set<DataCallback>> = new Map();
-  private pendingRequests: any[] = [];
+  private pendingRequests: Record<string, unknown>[] = [];
   private isConnecting: boolean = false;
   private reconnectTimer: NodeJS.Timeout | null = null;
 
@@ -33,7 +33,7 @@ class WebSocketService {
 
     this.socket.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
+        const data = JSON.parse(event.data) as WebSocketMessage;
         this.handleMessage(data);
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
@@ -121,16 +121,16 @@ class WebSocketService {
     }
   }
 
-  private handleMessage(data: any) {
+  private handleMessage(data: WebSocketMessage) {
     let symbol: string | undefined;
     let granularity: number | undefined;
 
-    if (data.msg_type === 'candles') {
+    if (data.msg_type === 'candles' && data.echo_req) {
       symbol = data.echo_req.ticks_history;
       granularity = data.echo_req.granularity;
-    } else if (data.msg_type === 'ohlc') {
+    } else if (data.msg_type === 'ohlc' && data.ohlc) {
       symbol = data.ohlc.symbol;
-      granularity = data.ohlc.granularity; // Note: API might return string or number, strict check needed? usually number
+      granularity = data.ohlc.granularity; 
     }
 
     if (symbol && granularity) {

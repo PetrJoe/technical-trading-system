@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { createChart, IChartApi, ISeriesApi, CandlestickSeries, LineSeries } from 'lightweight-charts';
+import { createChart, IChartApi, ISeriesApi, CandlestickSeries, LineSeries, createSeriesMarkers, ISeriesMarkersPluginApi, Time } from 'lightweight-charts';
 
 interface CandlestickChartProps {
     symbol?: string;
@@ -11,6 +11,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_50' }) 
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+    const seriesMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
     const socketRef = useRef<WebSocket | null>(null);
 
     const GRANULARITY = 60; // Fixed 1m
@@ -32,6 +33,8 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_50' }) 
                 timeVisible: true,
                 secondsVisible: true,
                 borderVisible: false,
+                rightOffset: 50,
+                barSpacing: 10,
                 tickMarkFormatter: (time: number) => {
                     const date = new Date(time * 1000);
                     return date.toLocaleTimeString([], { 
@@ -64,6 +67,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_50' }) 
 
         chartRef.current = chart;
         seriesRef.current = series;
+        seriesMarkersRef.current = createSeriesMarkers(series, []);
 
         let allCandles: any[] = [];
         let markers: any[] = [];
@@ -156,10 +160,10 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol = 'R_50' }) 
                     const lastTrend = trendData.trendPoints[trendData.trendPoints.length - 1];
                     if (trendData.type === 'resistance' && newCandle.close > lastTrend.value) {
                         markers.push({ time: newCandle.time, position: 'belowBar', color: '#10b981', shape: 'arrowUp', text: 'BREAKOUT' });
-                        (seriesRef.current as any).setMarkers([...markers]);
+                        if (seriesMarkersRef.current) seriesMarkersRef.current.setMarkers([...markers]);
                     } else if (trendData.type === 'support' && newCandle.close < lastTrend.value) {
                         markers.push({ time: newCandle.time, position: 'aboveBar', color: '#ef4444', shape: 'arrowDown', text: 'BREAKDOWN' });
-                        (seriesRef.current as any).setMarkers([...markers]);
+                        if (seriesMarkersRef.current) seriesMarkersRef.current.setMarkers([...markers]);
                     }
                 }
             }

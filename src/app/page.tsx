@@ -65,16 +65,16 @@ export default function Home() {
               >
                 <div className="text-center">
                   <div
-                    className={`text-2xl font-black ${
+                    className={`text-3xl font-black ${
                       latestSignal.type === 'BUY' ? 'text-emerald-400' : 'text-red-400'
                     }`}
                   >
                     {latestSignal.type}
                   </div>
-                  <div className="text-xs text-slate-300 mt-1">
+                  <div className="text-sm text-slate-300 mt-1">
                     Confidence: {(latestSignal.confidence * 100).toFixed(0)}%
                   </div>
-                  <div className="text-[10px] text-slate-400 mt-1">
+                  <div className="text-xs text-slate-400 mt-1">
                     @ {latestSignal.price.toFixed(4)}
                   </div>
                 </div>
@@ -85,14 +85,14 @@ export default function Home() {
             {latestSignal && (
               <div className="flex flex-col gap-2">
                  <div className="px-4 py-2 bg-slate-800/50 rounded-lg border border-slate-700 flex items-center justify-between gap-4">
-                    <span className="text-xs font-bold text-slate-400">TP</span>
-                    <span className="text-sm font-mono text-emerald-400">{latestSignal.takeProfit.toFixed(4)}</span>
+                    <span className="text-sm font-bold text-slate-400">TP</span>
+                    <span className="text-base font-mono text-emerald-400">{latestSignal.takeProfit.toFixed(4)}</span>
                  </div>
                  <div className="px-4 py-2 bg-slate-800/50 rounded-lg border border-slate-700 flex items-center justify-between gap-4">
-                    <span className="text-xs font-bold text-slate-400">SL</span>
-                    <span className="text-sm font-mono text-red-400">{latestSignal.stopLoss.toFixed(4)}</span>
+                    <span className="text-sm font-bold text-slate-400">SL</span>
+                    <span className="text-base font-mono text-red-400">{latestSignal.stopLoss.toFixed(4)}</span>
                  </div>
-                 <div className="text-[10px] text-slate-500 text-right">
+                 <div className="text-xs text-slate-500 text-right">
                     R:R {latestSignal.riskRewardRatio}
                  </div>
               </div>

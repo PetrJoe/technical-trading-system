@@ -7,8 +7,13 @@ import {
   ISeriesApi,
   CandlestickSeries,
   LineSeries,
+  IPriceLine,
+  SeriesMarker,
+  Time,
+  createSeriesMarkers,
+  ISeriesMarkersPluginApi,
 } from 'lightweight-charts';
-import { Candle, Timeframe, FibonacciLevel, TradingSignal } from '@/utils/types';
+import { Candle, Timeframe, FibonacciLevel, TradingSignal, SwingPoint, WebSocketMessage } from '@/utils/types';
 import { getRecentFibonacci } from '@/utils/fibonacci';
 import { analyzeTrend, findSupportResistanceZones } from '@/utils/technicalAnalysis';
 import { detectCandlestickPatterns } from '@/utils/candlestickPatterns';
@@ -39,9 +44,9 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  const fibLinesRef = useRef<ISeriesApi<'Line'>[]>([]);
-  const srLinesRef = useRef<any[]>([]);
-  const patternsRef = useRef<any[]>([]); // Store latest patterns
+  const seriesMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const srLinesRef = useRef<IPriceLine[]>([]);
+  const patternsRef = useRef<SeriesMarker<Time>[]>([]); // Store latest patterns
   
   // Refs for props to avoid effect re-runs
   const latestSignals = useRef(signals);
@@ -66,11 +71,11 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
 
     // Add signal markers
     if (signals.length > 0) {
-      const signalMarkers = signals.map((signal) => ({
-        time: signal.time as any,
-        position: (signal.type === 'BUY' ? 'belowBar' : 'aboveBar') as any,
+      const signalMarkers: SeriesMarker<Time>[] = signals.map((signal) => ({
+        time: signal.time as Time,
+        position: (signal.type === 'BUY' ? 'belowBar' : 'aboveBar'),
         color: signal.type === 'BUY' ? '#10b981' : '#ef4444',
-        shape: (signal.type === 'BUY' ? 'arrowUp' : 'arrowDown') as any,
+        shape: (signal.type === 'BUY' ? 'arrowUp' : 'arrowDown'),
         text: `${signal.type} ${(signal.confidence * 100).toFixed(0)}%`,
         size: 2,
       }));
@@ -78,7 +83,9 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
     }
 
     try {
-      (seriesRef.current as any).setMarkers(markers);
+      if (seriesMarkersRef.current) {
+        seriesMarkersRef.current.setMarkers(markers);
+      }
     } catch (e) {
       console.error('Error setting markers:', e);
     }
@@ -112,6 +119,8 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
         timeVisible: true,
         secondsVisible: timeframe === 'M1',
         borderVisible: false,
+        rightOffset: 50,
+        barSpacing: 10,
         tickMarkFormatter: (time: number) => {
           const date = new Date(time * 1000);
           return date.toLocaleTimeString([], {
@@ -147,53 +156,20 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
 
     chartRef.current = chart;
     seriesRef.current = series;
+    seriesMarkersRef.current = createSeriesMarkers(series, []);
 
     let allCandles: Candle[] = [];
 
     const drawFibonacci = (fibData: {
       levels: FibonacciLevel[];
-      startPoint: any;
-      endPoint: any;
+      startPoint: SwingPoint;
+      endPoint: SwingPoint;
     }) => {
-      // Clear existing Fibonacci lines
-      fibLinesRef.current.forEach((line) => {
-        if (line && chartRef.current) {
-            try {
-                chartRef.current.removeSeries(line);
-            } catch (e) {
-                console.warn('Error removing fib series:', e);
-            }
-        }
-      });
-      fibLinesRef.current = [];
-
-      const { levels, startPoint, endPoint } = fibData;
+      const { levels } = fibData;
 
       // Draw Fibonacci levels
       const keyLevels = [38.2, 50, 61.8];
-      levels.forEach((level) => {
-        if (!chartRef.current) return;
-        const isKeyLevel = keyLevels.includes(level.level);
-        const color = isKeyLevel ? '#fbbf24' : '#6b7280';
-        const lineWidth = isKeyLevel ? 2 : 1;
-
-        const fibLine = chartRef.current.addSeries(LineSeries, {
-          color,
-          lineWidth,
-          lineStyle: 0,
-          lastValueVisible: false,
-          priceLineVisible: false,
-        });
-
-        fibLine.setData([
-          { time: startPoint.time as any, value: level.price },
-          { time: endPoint.time as any, value: level.price },
-          { time: allCandles[allCandles.length - 1].time as any, value: level.price },
-        ]);
-
-        fibLinesRef.current.push(fibLine);
-      });
-
+      
       // Update info
       const keyLevelPrices = levels
         .filter((l) => keyLevels.includes(l.level))
@@ -290,14 +266,14 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
 
       // Detect patterns
       const patterns = detectCandlestickPatterns(candles, 5);
-      const patternMarkers = patterns
+      const patternMarkers: SeriesMarker<Time>[] = patterns
         .filter((p) => p.confidence >= 0.7)
         .slice(-5)
         .map((p) => ({
-          time: p.time as any,
-          position: (p.type === 'bullish' ? 'belowBar' : 'aboveBar') as any,
+          time: p.time as Time,
+          position: (p.type === 'bullish' ? 'belowBar' : 'aboveBar'),
           color: p.type === 'bullish' ? '#10b981' : '#ef4444',
-          shape: 'circle' as any,
+          shape: 'circle',
           text: p.name,
         }));
       
@@ -310,11 +286,11 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
       }
     };
 
-    const handleDataMessage = (data: any) => {
+    const handleDataMessage = (data: WebSocketMessage) => {
       if (!series) return;
 
-      if (data.msg_type === 'candles') {
-        allCandles = data.candles.map((c: any) => ({
+      if (data.msg_type === 'candles' && data.candles) {
+        allCandles = data.candles.map((c) => ({
           time: Number(c.epoch),
           open: parseFloat(c.open),
           high: parseFloat(c.high),
@@ -323,7 +299,7 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
         }));
         series.setData(allCandles as any);
         updateAnalysis(allCandles);
-      } else if (data.msg_type === 'ohlc') {
+      } else if (data.msg_type === 'ohlc' && data.ohlc) {
         const o = data.ohlc;
         const newCandle: Candle = {
           time: Number(o.open_time),
@@ -368,7 +344,10 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
       wsService.unsubscribe(symbol, granularity, handleDataMessage);
       if (chartRef.current) {
         chartRef.current.remove();
+        chartRef.current = null;
       }
+      seriesRef.current = null;
+      srLinesRef.current = [];
     };
   }, [symbol, timeframe]);
 
@@ -378,13 +357,13 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
       <div className="absolute top-2 left-2 right-2 z-10 flex justify-between items-start pointer-events-none">
         <div className="flex flex-col gap-1">
           <div className="px-3 py-1.5 bg-slate-900/80 backdrop-blur-sm rounded-lg border border-white/10">
-            <span className="text-xs font-bold text-slate-200 tracking-wide">
+            <span className="text-sm font-bold text-slate-200 tracking-wide">
               {title}
             </span>
           </div>
           {trendInfo && (
             <div className="px-3 py-1 bg-slate-900/80 backdrop-blur-sm rounded-lg border border-white/10">
-              <span className="text-[10px] font-medium text-slate-300">
+              <span className="text-xs font-medium text-slate-300">
                 {trendInfo}
               </span>
             </div>
@@ -392,7 +371,7 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
         </div>
         {fibInfo && (
           <div className="px-3 py-1 bg-amber-500/10 backdrop-blur-sm rounded-lg border border-amber-500/30 max-w-xs">
-            <span className="text-[9px] font-medium text-amber-200">
+            <span className="text-xs font-medium text-amber-200">
               Fib: {fibInfo}
             </span>
           </div>
