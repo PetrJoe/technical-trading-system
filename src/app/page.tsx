@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { Candle, SupportResistanceZone, TradingSignal } from '@/utils/types';
 import { findSupportResistanceZones } from '@/utils/technicalAnalysis';
@@ -26,20 +26,21 @@ export default function Home() {
   const [candlesM5, setCandlesM5] = useState<Candle[]>([]);
   const [candlesM15, setCandlesM15] = useState<Candle[]>([]);
   const [candles1H, setCandles1H] = useState<Candle[]>([]);
-  const [strategy, setStrategy] = useState<'standard' | 'scalping'>('standard');
+  const [strategy, setStrategy] = useState<'standard' | 'scalping'>('scalping');
+  const [activeTrade, setActiveTrade] = useState<TradingSignal | null>(null);
 
   // --- STANDARD STRATEGY LOGIC ---
 
   // 1. H1 Trend Analysis
   const h1Analysis = useMemo(() => {
-    if (strategy !== 'standard') return { bias: 'range' as const, zones: [] };
+    // Always calculate zones for scalping support
     if (candles1H.length < 50) return { bias: 'range' as const, zones: [] };
     
     const bias = detectMarketStructure(candles1H);
     const zones = findSupportResistanceZones(candles1H, 100);
     
     return { bias, zones };
-  }, [candles1H, strategy]);
+  }, [candles1H]);
 
   // 2. M15 Setup Analysis
   const m15Setup = useMemo(() => {
@@ -61,6 +62,15 @@ export default function Home() {
 
   // --- SCALPING STRATEGY LOGIC ---
 
+  // 0. Calculate Zones (M5 + M15) for Scalping
+  const scalpZones = useMemo(() => {
+    // Only calculate if we have data
+    const zonesM5 = candlesM5.length >= 20 ? findSupportResistanceZones(candlesM5, 100, 3) : [];
+    const zonesM15 = candlesM15.length >= 20 ? findSupportResistanceZones(candlesM15, 100, 3) : [];
+    
+    return [...zonesM5, ...zonesM15];
+  }, [candlesM5, candlesM15]);
+
   // 1. M5 Trend (Scalp)
   const m5ScalpTrend = useMemo(() => {
     if (strategy !== 'scalping') return 'range';
@@ -70,14 +80,14 @@ export default function Home() {
   // 2. M5 Zone (Scalp)
   const m5ScalpZone = useMemo(() => {
     if (strategy !== 'scalping') return false;
-    return detectM5ScalpZone(candlesM5, m5ScalpTrend);
-  }, [candlesM5, m5ScalpTrend, strategy]);
+    return detectM5ScalpZone(candlesM5, m5ScalpTrend, scalpZones);
+  }, [candlesM5, m5ScalpTrend, strategy, scalpZones]);
 
   // 3. M1 Entry (Scalp)
   const m1ScalpEntry = useMemo(() => {
     if (strategy !== 'scalping') return null;
-    return detectM1ScalpEntry(candlesM1, m5ScalpTrend, m5ScalpZone);
-  }, [candlesM1, m5ScalpTrend, m5ScalpZone, strategy]);
+    return detectM1ScalpEntry(candlesM1, m5ScalpTrend, scalpZones);
+  }, [candlesM1, m5ScalpTrend, scalpZones, strategy]);
 
   // Determine Overall Status & Signal
   const currentSignal = useMemo(() => {
@@ -118,6 +128,8 @@ export default function Home() {
         signal={currentSignal}
         strategy={strategy}
         onStrategyChange={setStrategy}
+        currentPrice={candlesM1.length > 0 ? candlesM1[candlesM1.length - 1].close : undefined}
+        trend={strategy === 'standard' ? h1Analysis.bias : m5ScalpTrend}
       />
 
       {/* 4-Chart Grid */}
@@ -128,6 +140,7 @@ export default function Home() {
             timeframe="M1" 
             title="1 MINUTE (ENTRY)"
             onDataUpdate={(data) => handleDataUpdate('M1', data)}
+            extraZones={strategy === 'scalping' ? scalpZones : undefined}
           />
         </div>
 

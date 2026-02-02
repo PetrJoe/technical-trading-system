@@ -1,5 +1,5 @@
 import { Candle, SupportResistanceZone, TradingSignal } from './types';
-import { findSupportResistanceZones, calculateEMA } from './technicalAnalysis';
+import { findSupportResistanceZones, calculateEMA, calculateRSI } from './technicalAnalysis';
 
 // --- Helper Functions ---
 
@@ -336,11 +336,12 @@ export function detectM5ScalpTrend(candles: Candle[]): 'bullish' | 'bearish' | '
 
 /**
  * 2. M5 Zone (Scalp Mode)
- * Price must be pulling back to the EMA 20 or a recent broken level
+ * Price must be pulling back to the EMA 20 or a recent broken level OR near a Support/Resistance zone
  */
 export function detectM5ScalpZone(
   candles: Candle[], 
-  trend: 'bullish' | 'bearish' | 'range'
+  trend: 'bullish' | 'bearish' | 'range',
+  zones: SupportResistanceZone[] = []
 ): boolean {
   if (trend === 'range' || candles.length < 20) return false;
 
@@ -352,82 +353,110 @@ export function detectM5ScalpZone(
   const dist = Math.abs(currentPrice - ema20) / currentPrice;
   const isNearEMA = dist < 0.0005; 
 
-  // Bullish: Price should be slightly above or testing EMA
+  // Check if near a valid Support/Resistance zone (within 0.2%)
+  const isNearZone = zones.some(z => {
+    const distToZone = Math.abs(currentPrice - z.price) / currentPrice;
+    if (distToZone > 0.002) return false;
+    
+    // For Bullish trend, we want Support. For Bearish trend, we want Resistance.
+    if (trend === 'bullish' && z.type === 'support') return true;
+    if (trend === 'bearish' && z.type === 'resistance') return true;
+    return false;
+  });
+
+  // Bullish: Price should be slightly above or testing EMA OR testing Support
   if (trend === 'bullish') {
     // Allow small dip below EMA for liquidity grab, but mostly above
-    return isNearEMA || (currentPrice > ema20 && currentPrice < ema20 * 1.001);
+    return isNearZone || isNearEMA || (currentPrice > ema20 && currentPrice < ema20 * 1.001);
   }
 
-  // Bearish
+  // Bearish: Price should be slightly below or testing EMA OR testing Resistance
   if (trend === 'bearish') {
-    return isNearEMA || (currentPrice < ema20 && currentPrice > ema20 * 0.999);
+    return isNearZone || isNearEMA || (currentPrice < ema20 && currentPrice > ema20 * 0.999);
   }
 
   return false;
 }
 
 /**
- * 3. M1 Entry (Scalp Mode)
- * Fractal Break: Wait for CHoCH (Change of Character)
+ * 3. M1 Entry (Scalp Mode) - Support & Resistance Bounce Strategy
+ * Rules:
+ * - Price at Zone
+ * - Rejection Wick
+ * - Strong Close
+ * - RSI Filter
  */
 export function detectM1ScalpEntry(
   candles: Candle[],
   trend: 'bullish' | 'bearish' | 'range',
-  isInZone: boolean
+  zones: SupportResistanceZone[]
 ): TradingSignal | null {
-  if (!isInZone || trend === 'range' || candles.length < 20) return null;
+  if (candles.length < 20 || zones.length === 0) return null;
 
   const lastCandle = candles[candles.length - 1];
-  const swings = identifySwingPoints(candles, 2, 2);
+  const currentPrice = lastCandle.close;
 
-  let entrySignal: TradingSignal | null = null;
+  // 1. Identify Pip Size (Heuristic)
+  const pipSize = currentPrice < 50 ? 0.0001 : 0.01;
 
-  if (trend === 'bullish') {
-    // Look for Break of recent Minor High (CHoCH)
-    // We need a recent Lower High to be broken
-    const highs = swings.filter(s => s.type === 'high');
-    if (highs.length > 0) {
-      const lastSwingHigh = highs[highs.length - 1];
-      
-      // Check if we just broke it
-      if (lastCandle.close > lastSwingHigh.price && lastCandle.close > lastCandle.open) {
-         // Stop Loss below recent low
-         const recentLow = Math.min(...candles.slice(-5).map(c => c.low));
-         const stopLoss = recentLow - (lastCandle.high - lastCandle.low) * 0.2;
-         const risk = lastCandle.close - stopLoss;
-         
-         entrySignal = {
-           type: 'BUY',
-           price: lastCandle.close,
-           time: lastCandle.time,
-           stopLoss: stopLoss,
-           takeProfit: lastCandle.close + (risk * 3), // 1:3 RR for Scalping
-           reason: 'M1 Fractal CHoCH'
-         };
-      }
-    }
-  } else if (trend === 'bearish') {
-    // Look for Break of recent Minor Low
-    const lows = swings.filter(s => s.type === 'low');
-    if (lows.length > 0) {
-      const lastSwingLow = lows[lows.length - 1];
-      
-      if (lastCandle.close < lastSwingLow.price && lastCandle.close < lastCandle.open) {
-         const recentHigh = Math.max(...candles.slice(-5).map(c => c.high));
-         const stopLoss = recentHigh + (lastCandle.high - lastCandle.low) * 0.2;
-         const risk = stopLoss - lastCandle.close;
+  // 2. Check RSI Filter
+  const rsi = calculateRSI(candles, 14);
+  const rsiValue = rsi || 50; 
 
-         entrySignal = {
-           type: 'SELL',
-           price: lastCandle.close,
-           time: lastCandle.time,
-           stopLoss: stopLoss,
-           takeProfit: lastCandle.close - (risk * 3), // 1:3 RR
-           reason: 'M1 Fractal CHoCH'
-         };
-      }
+  // 3. Find Nearest Zone
+  const nearestZone = zones.find(z => 
+    Math.abs(currentPrice - z.price) / currentPrice < 0.0015 
+  );
+
+  if (!nearestZone) return null;
+
+  let signal: TradingSignal | null = null;
+
+  // --- BUY SETUP (Support Bounce) ---
+  if (nearestZone.type === 'support') {
+    const range = lastCandle.high - lastCandle.low;
+    const lowerWick = Math.min(lastCandle.open, lastCandle.close) - lastCandle.low;
+    const isRejection = lowerWick > 0.3 * range; // At least 30% wick
+    const isBullish = lastCandle.close > lastCandle.open;
+    const rsiCondition = rsiValue < 45; // Relaxed from 30 for more frequency
+
+    if (isRejection && isBullish && rsiCondition) {
+       const slPips = 5;
+       const tpPips = 10;
+       
+       signal = {
+         type: 'BUY',
+         price: currentPrice,
+         time: lastCandle.time,
+         stopLoss: currentPrice - (slPips * pipSize),
+         takeProfit: currentPrice + (tpPips * pipSize),
+         reason: 'Support Bounce + RSI'
+       };
     }
   }
 
-  return entrySignal;
+  // --- SELL SETUP (Resistance Bounce) ---
+  if (nearestZone.type === 'resistance') {
+    const range = lastCandle.high - lastCandle.low;
+    const upperWick = lastCandle.high - Math.max(lastCandle.open, lastCandle.close);
+    const isRejection = upperWick > 0.3 * range;
+    const isBearish = lastCandle.close < lastCandle.open;
+    const rsiCondition = rsiValue > 55; // Relaxed from 70
+
+    if (isRejection && isBearish && rsiCondition) {
+       const slPips = 5;
+       const tpPips = 10;
+       
+       signal = {
+         type: 'SELL',
+         price: currentPrice,
+         time: lastCandle.time,
+         stopLoss: currentPrice + (slPips * pipSize),
+         takeProfit: currentPrice - (tpPips * pipSize),
+         reason: 'Resistance Bounce + RSI'
+       };
+    }
+  }
+
+  return signal;
 }

@@ -7,13 +7,17 @@ interface DashboardProps {
   signal?: TradingSignal | null;
   strategy: 'standard' | 'scalping';
   onStrategyChange: (s: 'standard' | 'scalping') => void;
+  currentPrice?: number;
+  trend?: 'bullish' | 'bearish' | 'range';
 }
 
 const Dashboard: React.FC<DashboardProps> = ({
   status,
   signal,
   strategy,
-  onStrategyChange
+  onStrategyChange,
+  currentPrice,
+  trend
 }) => {
   const getStatusColor = (s: string) => {
     switch (s) {
@@ -24,25 +28,33 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
+  const getProjectedLevels = () => {
+    if (!currentPrice || !trend || trend === 'range') return null;
+    
+    // Determine pip size based on price (standard vs JPY/Indices)
+    const pipSize = currentPrice < 50 ? 0.0001 : 0.01;
+    const tpPips = 10;
+    const slPips = 5;
+    
+    if (trend === 'bullish') {
+      return {
+        tp: (currentPrice + (tpPips * pipSize)).toFixed(5),
+        sl: (currentPrice - (slPips * pipSize)).toFixed(5)
+      };
+    } else {
+      // Bearish
+      return {
+        tp: (currentPrice - (tpPips * pipSize)).toFixed(5),
+        sl: (currentPrice + (slPips * pipSize)).toFixed(5)
+      };
+    }
+  };
+
+  const projected = !signal && strategy === 'scalping' ? getProjectedLevels() : null;
+
   return (
     <div className="dashboard-container">
       
-      {/* Strategy Toggle */}
-      <div className="strategy-toggle">
-        <button 
-          className={`strategy-btn ${strategy === 'standard' ? 'active' : ''}`}
-          onClick={() => onStrategyChange('standard')}
-        >
-          Standard (Trend)
-        </button>
-        <button 
-          className={`strategy-btn ${strategy === 'scalping' ? 'active' : ''}`}
-          onClick={() => onStrategyChange('scalping')}
-        >
-          Scalping (M5/M1)
-        </button>
-      </div>
-
       {/* 1. Main Status Box */}
       <div className="status-box" style={{ borderColor: getStatusColor(status) }}>
         <div className="status-header">
@@ -59,18 +71,35 @@ const Dashboard: React.FC<DashboardProps> = ({
         <div className="signal-details">
             <div className="signal-row">
                 <span className="label">ENTRY:</span> 
-                <span className="value">{signal ? signal.price.toFixed(5) : '---'}</span>
+                <span className="value">{signal ? signal.price.toFixed(5) : currentPrice ? currentPrice.toFixed(5) : '---'}</span>
                 {signal && (
                     <span className={`type-tag ${signal.type === 'BUY' ? 'bullish' : 'bearish'}`}>
                         {signal.type}
                     </span>
                 )}
+                {!signal && trend && trend !== 'range' && (
+                    <span className={`type-tag ${trend === 'bullish' ? 'bullish' : 'bearish'}`}>
+                        {trend.toUpperCase()} BIAS
+                    </span>
+                )}
             </div>
             <div className="signal-row">
-                <span className="label">TP:</span> <span className="value">{signal ? signal.takeProfit.toFixed(5) : '---'}</span>
+                <span className="label">TP:</span> 
+                <span className="value">
+                  {signal 
+                    ? signal.takeProfit.toFixed(5) 
+                    : projected ? projected.tp : '---'
+                  }
+                </span>
             </div>
             <div className="signal-row">
-                <span className="label">SL:</span> <span className="value">{signal ? signal.stopLoss.toFixed(5) : '---'}</span>
+                <span className="label">SL:</span> 
+                <span className="value">
+                  {signal 
+                    ? signal.stopLoss.toFixed(5) 
+                    : projected ? projected.sl : '---'
+                  }
+                </span>
             </div>
         </div>
       </div>

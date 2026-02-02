@@ -12,7 +12,7 @@ import {
   ISeriesMarkersPluginApi,
   IPriceLine,
 } from 'lightweight-charts';
-import { Candle, Timeframe, FibonacciLevel, SwingPoint, WebSocketMessage } from '@/utils/types';
+import { Candle, Timeframe, FibonacciLevel, SwingPoint, WebSocketMessage, SupportResistanceZone } from '@/utils/types';
 import { getRecentFibonacci } from '@/utils/fibonacci';
 import { analyzeTrend, findSupportResistanceZones } from '@/utils/technicalAnalysis';
 import { detectCandlestickPatterns } from '@/utils/candlestickPatterns';
@@ -24,6 +24,7 @@ interface MultiTimeframeChartProps {
   timeframe: Timeframe;
   title: string;
   onDataUpdate?: (candles: Candle[]) => void;
+  extraZones?: SupportResistanceZone[];
 }
 
 const GRANULARITY_MAP: Record<Timeframe, number> = {
@@ -38,6 +39,7 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
   timeframe,
   title,
   onDataUpdate,
+  extraZones = [],
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -48,10 +50,15 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
   
   // Refs for props to avoid effect re-runs
   const latestOnDataUpdate = useRef(onDataUpdate);
+  const latestExtraZones = useRef(extraZones);
 
   useEffect(() => {
     latestOnDataUpdate.current = onDataUpdate;
   }, [onDataUpdate]);
+
+  useEffect(() => {
+    latestExtraZones.current = extraZones;
+  }, [extraZones]);
 
   const [trendInfo, setTrendInfo] = useState<string>('');
   const [fibInfo, setFibInfo] = useState<string>('');
@@ -157,10 +164,11 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
       });
       srLinesRef.current = [];
 
-      const zones = findSupportResistanceZones(candles, 50);
+      const internalZones = findSupportResistanceZones(candles, 50, 3);
+      const zones = [...internalZones, ...(latestExtraZones.current || [])];
 
       if (seriesRef.current) {
-        zones.slice(0, 3).forEach((zone) => {
+        zones.forEach((zone) => {
             const color = zone.type === 'support' ? '#34d39955' : '#f8717155';
             const priceLine = seriesRef.current!.createPriceLine({
             price: zone.price,
@@ -218,7 +226,7 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
 
       // Notify parent
       if (latestOnDataUpdate.current) {
-        latestOnDataUpdate.current(candles);
+        latestOnDataUpdate.current([...candles]);
       }
     };
 

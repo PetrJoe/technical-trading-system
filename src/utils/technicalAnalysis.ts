@@ -99,7 +99,8 @@ export function analyzeTrendBias(candles: Candle[]): 'bullish' | 'bearish' | 'ra
  */
 export function findSupportResistanceZones(
   candles: Candle[],
-  lookback: number = 50
+  lookback: number = 50,
+  maxZones: number = 6
 ): SupportResistanceZone[] {
   if (candles.length < 20) return [];
 
@@ -160,10 +161,27 @@ export function findSupportResistanceZones(
     }
   });
 
+  // Enhance strength for round numbers
+  zones.forEach(zone => {
+    // Simple check: does the price look "round"?
+    // We check if the price ends with 00 or 50 in its significant digits
+    // Adjust precision based on price level roughly
+    let priceStr = "";
+    if (zone.price < 10) priceStr = zone.price.toFixed(4);
+    else if (zone.price < 1000) priceStr = zone.price.toFixed(2);
+    else priceStr = zone.price.toFixed(0);
+
+    if (priceStr.endsWith('00') || priceStr.endsWith('50')) {
+      zone.strength += 2; // Significant bonus for round numbers
+    } else if (priceStr.endsWith('0')) {
+      zone.strength += 1; // Smaller bonus
+    }
+  });
+
   // Sort by strength and return top zones
   return zones
     .sort((a, b) => b.strength - a.strength)
-    .slice(0, 5);
+    .slice(0, maxZones);
 }
 
 /**
