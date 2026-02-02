@@ -33,16 +33,20 @@ export function calculateEMA(
 /**
  * Determine overall market trend using multiple EMAs
  */
-export function analyzeTrend(candles: Candle[]): TrendInfo {
-  if (candles.length < 50) {
+export function analyzeTrend(
+  candles: Candle[],
+  shortPeriod: number = 20,
+  longPeriod: number = 50
+): TrendInfo {
+  if (candles.length < longPeriod) {
     return { direction: 'sideways', strength: 0 };
   }
 
-  const ema20 = calculateEMA(candles, 20);
-  const ema50 = calculateEMA(candles, 50);
+  const emaShort = calculateEMA(candles, shortPeriod);
+  const emaLong = calculateEMA(candles, longPeriod);
   const currentPrice = candles[candles.length - 1].close;
 
-  if (!ema20 || !ema50) {
+  if (!emaShort || !emaLong) {
     return { direction: 'sideways', strength: 0 };
   }
 
@@ -50,15 +54,15 @@ export function analyzeTrend(candles: Candle[]): TrendInfo {
   let direction: 'bullish' | 'bearish' | 'sideways' = 'sideways';
   let strength = 0;
 
-  if (currentPrice > ema20 && ema20 > ema50) {
+  if (currentPrice > emaShort && emaShort > emaLong) {
     direction = 'bullish';
-    const priceAboveEma = ((currentPrice - ema20) / ema20) * 100;
-    const emaSpread = ((ema20 - ema50) / ema50) * 100;
+    const priceAboveEma = ((currentPrice - emaShort) / emaShort) * 100;
+    const emaSpread = ((emaShort - emaLong) / emaLong) * 100;
     strength = Math.min((priceAboveEma + emaSpread) / 2, 10) / 10;
-  } else if (currentPrice < ema20 && ema20 < ema50) {
+  } else if (currentPrice < emaShort && emaShort < emaLong) {
     direction = 'bearish';
-    const priceBelowEma = ((ema20 - currentPrice) / ema20) * 100;
-    const emaSpread = ((ema50 - ema20) / ema50) * 100;
+    const priceBelowEma = ((emaShort - currentPrice) / emaShort) * 100;
+    const emaSpread = ((emaLong - emaShort) / emaLong) * 100;
     strength = Math.min((priceBelowEma + emaSpread) / 2, 10) / 10;
   } else {
     // Sideways or transitioning
