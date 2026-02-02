@@ -2,8 +2,17 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { Candle } from '@/utils/types';
-import { analyzeH1 } from '@/utils/technicalAnalysis';
+import { Candle, SupportResistanceZone, TradingSignal } from '@/utils/types';
+import { findSupportResistanceZones } from '@/utils/technicalAnalysis';
+import { 
+  detectMarketStructure, 
+  detectSetupZone, 
+  detectConfirmation, 
+  detectEntryTrigger,
+  detectM5ScalpTrend,
+  detectM5ScalpZone,
+  detectM1ScalpEntry
+} from '@/utils/tradingLogic';
 import Dashboard from '@/components/Dashboard';
 import './Home.css';
 
@@ -17,12 +26,78 @@ export default function Home() {
   const [candlesM5, setCandlesM5] = useState<Candle[]>([]);
   const [candlesM15, setCandlesM15] = useState<Candle[]>([]);
   const [candles1H, setCandles1H] = useState<Candle[]>([]);
+  const [strategy, setStrategy] = useState<'standard' | 'scalping'>('standard');
 
-  // Memoized Analysis Results
+  // --- STANDARD STRATEGY LOGIC ---
+
+  // 1. H1 Trend Analysis
   const h1Analysis = useMemo(() => {
-    if (candles1H.length < 50) return { bias: 'RANGE' as const, zones: [] };
-    return analyzeH1(candles1H);
-  }, [candles1H]);
+    if (strategy !== 'standard') return { bias: 'range' as const, zones: [] };
+    if (candles1H.length < 50) return { bias: 'range' as const, zones: [] };
+    
+    const bias = detectMarketStructure(candles1H);
+    const zones = findSupportResistanceZones(candles1H, 100);
+    
+    return { bias, zones };
+  }, [candles1H, strategy]);
+
+  // 2. M15 Setup Analysis
+  const m15Setup = useMemo(() => {
+    if (strategy !== 'standard') return false;
+    return detectSetupZone(candlesM15, h1Analysis.bias, h1Analysis.zones);
+  }, [candlesM15, h1Analysis, strategy]);
+
+  // 3. M5 Confirmation Analysis
+  const m5Confirmation = useMemo(() => {
+    if (strategy !== 'standard') return false;
+    return detectConfirmation(candlesM5, h1Analysis.bias, m15Setup);
+  }, [candlesM5, h1Analysis.bias, m15Setup, strategy]);
+
+  // 4. M1 Entry Trigger
+  const m1Entry = useMemo(() => {
+    if (strategy !== 'standard') return null;
+    return detectEntryTrigger(candlesM1, h1Analysis.bias, m5Confirmation);
+  }, [candlesM1, h1Analysis.bias, m5Confirmation, strategy]);
+
+  // --- SCALPING STRATEGY LOGIC ---
+
+  // 1. M5 Trend (Scalp)
+  const m5ScalpTrend = useMemo(() => {
+    if (strategy !== 'scalping') return 'range';
+    return detectM5ScalpTrend(candlesM5);
+  }, [candlesM5, strategy]);
+
+  // 2. M5 Zone (Scalp)
+  const m5ScalpZone = useMemo(() => {
+    if (strategy !== 'scalping') return false;
+    return detectM5ScalpZone(candlesM5, m5ScalpTrend);
+  }, [candlesM5, m5ScalpTrend, strategy]);
+
+  // 3. M1 Entry (Scalp)
+  const m1ScalpEntry = useMemo(() => {
+    if (strategy !== 'scalping') return null;
+    return detectM1ScalpEntry(candlesM1, m5ScalpTrend, m5ScalpZone);
+  }, [candlesM1, m5ScalpTrend, m5ScalpZone, strategy]);
+
+  // Determine Overall Status & Signal
+  const currentSignal = useMemo(() => {
+    return strategy === 'standard' ? m1Entry : m1ScalpEntry;
+  }, [strategy, m1Entry, m1ScalpEntry]);
+  
+  const status = useMemo(() => {
+    if (currentSignal) return 'ENTRY';
+    
+    if (strategy === 'standard') {
+      if (m5Confirmation) return 'CONFIRMATION';
+      if (m15Setup) return 'SETUP';
+      return 'SCANNING';
+    } else {
+      // Scalping Status Mapping
+      if (m5ScalpZone) return 'SETUP'; // In Zone = Setup/Ready
+      if (m5ScalpTrend !== 'range') return 'SCANNING'; // Have trend, looking for zone
+      return 'SCANNING';
+    }
+  }, [strategy, currentSignal, m5Confirmation, m15Setup, m5ScalpZone, m5ScalpTrend]);
 
   const handleDataUpdate = useCallback(
     (timeframe: string, candles: Candle[]) => {
@@ -39,7 +114,10 @@ export default function Home() {
     <main className="main-layout">
       {/* Dashboard Bar */}
       <Dashboard
-        h1Bias={h1Analysis.bias}
+        status={status}
+        signal={currentSignal}
+        strategy={strategy}
+        onStrategyChange={setStrategy}
       />
 
       {/* 4-Chart Grid */}

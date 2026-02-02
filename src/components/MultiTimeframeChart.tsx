@@ -265,18 +265,27 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
     wsService.subscribe(symbol, timeframe, granularity, handleDataMessage);
 
     const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({
+      if (chartContainerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({
           width: chartContainerRef.current.clientWidth,
           height: chartContainerRef.current.clientHeight,
         });
       }
     };
 
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
+
+    if (chartContainerRef.current) {
+      resizeObserver.observe(chartContainerRef.current);
+    }
+
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       wsService.unsubscribe(symbol, granularity, handleDataMessage);
       chart.remove();
     };
@@ -291,7 +300,7 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
           {fibInfo && <span className="fib-info">{fibInfo}</span>}
         </div>
       </div>
-      <div ref={chartContainerRef} className="chart-area" />
+      <div ref={chartContainerRef} className="chart-view" />
     </div>
   );
 };

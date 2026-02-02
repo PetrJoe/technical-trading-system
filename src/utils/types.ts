@@ -37,6 +37,15 @@ export interface TrendInfo {
   strength: number;
 }
 
+export interface TradingSignal {
+  type: 'BUY' | 'SELL';
+  price: number;
+  time: number;
+  stopLoss: number;
+  takeProfit: number;
+  reason: string;
+}
+
 export type Timeframe = 'M1' | 'M5' | 'M15' | '1H';
 
 export const TIMEFRAME_SECONDS: Record<Timeframe, number> = {

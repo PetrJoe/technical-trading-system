@@ -1,59 +1,78 @@
 import React from 'react';
+import { TradingSignal } from '@/utils/types';
 import './Dashboard.css';
 
 interface DashboardProps {
-  h1Bias: 'BULLISH' | 'BEARISH' | 'RANGE';
+  status: 'SCANNING' | 'SETUP' | 'CONFIRMATION' | 'ENTRY';
+  signal?: TradingSignal | null;
+  strategy: 'standard' | 'scalping';
+  onStrategyChange: (s: 'standard' | 'scalping') => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({
-  h1Bias,
+  status,
+  signal,
+  strategy,
+  onStrategyChange
 }) => {
-  const getBadgeType = (bias: string) => {
-    if (bias === 'BULLISH') return 'bullish';
-    if (bias === 'BEARISH') return 'bearish';
-    return 'neutral';
+  const getStatusColor = (s: string) => {
+    switch (s) {
+        case 'ENTRY': return '#10b981'; // Green
+        case 'CONFIRMATION': return '#f59e0b'; // Amber
+        case 'SETUP': return '#3b82f6'; // Blue
+        default: return '#64748b'; // Slate
+    }
   };
 
   return (
     <div className="dashboard-container">
       
+      {/* Strategy Toggle */}
+      <div className="strategy-toggle">
+        <button 
+          className={`strategy-btn ${strategy === 'standard' ? 'active' : ''}`}
+          onClick={() => onStrategyChange('standard')}
+        >
+          Standard (Trend)
+        </button>
+        <button 
+          className={`strategy-btn ${strategy === 'scalping' ? 'active' : ''}`}
+          onClick={() => onStrategyChange('scalping')}
+        >
+          Scalping (M5/M1)
+        </button>
+      </div>
+
       {/* 1. Main Status Box */}
-      <div className="status-box scanning">
+      <div className="status-box" style={{ borderColor: getStatusColor(status) }}>
         <div className="status-header">
-            <span className="status-icon">📊</span>
-            <div className="status-text scanning">
-            MARKET OVERVIEW
+            <span className="status-icon">
+                {status === 'ENTRY' ? '🚀' : status === 'CONFIRMATION' ? '⚠️' : status === 'SETUP' ? '👀' : '📊'}
+            </span>
+            <div className="status-text" style={{ color: getStatusColor(status) }}>
+                {status === 'ENTRY' ? 'TRADE ENTRY TRIGGERED' : 
+                 status === 'CONFIRMATION' ? 'AWAITING CONFIRMATION' : 
+                 status === 'SETUP' ? 'SETUP DETECTED' : 'SCANNING MARKETS'}
             </div>
         </div>
-      </div>
-
-      {/* 2. Analysis Grid (H1 Trend Only) */}
-      <div className="analysis-grid">
-        <div className="analysis-card">
-            <div className="card-header">
-                <span className="card-label">H1 TREND</span>
-                <span className={`card-badge ${getBadgeType(h1Bias)}`}>
-                    {h1Bias}
-                </span>
+        
+        <div className="signal-details">
+            <div className="signal-row">
+                <span className="label">ENTRY:</span> 
+                <span className="value">{signal ? signal.price.toFixed(5) : '---'}</span>
+                {signal && (
+                    <span className={`type-tag ${signal.type === 'BUY' ? 'bullish' : 'bearish'}`}>
+                        {signal.type}
+                    </span>
+                )}
             </div>
-            {/* Visual Progress Bar */}
-            <div className="progress-bar-container">
-                <div 
-                    className="progress-bar"
-                    style={{
-                        width: '100%',
-                        backgroundColor: getBadgeType(h1Bias) === 'bullish' ? '#34d399' : 
-                                       getBadgeType(h1Bias) === 'bearish' ? '#f87171' : '#334155',
-                    }}
-                />
+            <div className="signal-row">
+                <span className="label">TP:</span> <span className="value">{signal ? signal.takeProfit.toFixed(5) : '---'}</span>
+            </div>
+            <div className="signal-row">
+                <span className="label">SL:</span> <span className="value">{signal ? signal.stopLoss.toFixed(5) : '---'}</span>
             </div>
         </div>
-      </div>
-
-      {/* 3. Info Box */}
-      <div className="waiting-box">
-          <div className="pulse-dot"></div>
-          <span className="waiting-text">MONITORING PRICE ACTION</span>
       </div>
     </div>
   );
