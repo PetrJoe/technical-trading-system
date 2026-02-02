@@ -89,14 +89,50 @@ export default function Home() {
     return detectM1ScalpEntry(candlesM1, m5ScalpTrend, scalpZones);
   }, [candlesM1, m5ScalpTrend, scalpZones, strategy]);
 
-  // Determine Overall Status & Signal
-  const currentSignal = useMemo(() => {
+  // Determine Overall Status & Signal (Potential New Signal)
+  const potentialSignal = useMemo(() => {
     return strategy === 'standard' ? m1Entry : m1ScalpEntry;
   }, [strategy, m1Entry, m1ScalpEntry]);
+
+  // Manage Active Trade Lifecycle
+  useEffect(() => {
+    // 1. If we have a new potential signal and no active trade, take the trade
+    if (potentialSignal && !activeTrade) {
+      setActiveTrade(potentialSignal);
+    }
+
+    // 2. If we have an active trade, check if TP or SL is hit
+    if (activeTrade && candlesM1.length > 0) {
+      const currentPrice = candlesM1[candlesM1.length - 1].close;
+      
+      // Check for Exit
+      let exitTriggered = false;
+      
+      if (activeTrade.type === 'BUY') {
+        if (currentPrice >= activeTrade.takeProfit) exitTriggered = true; // TP Hit
+        if (currentPrice <= activeTrade.stopLoss) exitTriggered = true;   // SL Hit
+      } else {
+        // SELL
+        if (currentPrice <= activeTrade.takeProfit) exitTriggered = true; // TP Hit
+        if (currentPrice >= activeTrade.stopLoss) exitTriggered = true;   // SL Hit
+      }
+
+      if (exitTriggered) {
+        setActiveTrade(null); // Reset trade, start scanning again
+      }
+    }
+  }, [potentialSignal, activeTrade, candlesM1]);
+
+  // Reset active trade if strategy changes
+  useEffect(() => {
+    setActiveTrade(null);
+  }, [strategy]);
   
   const status = useMemo(() => {
-    if (currentSignal) return 'ENTRY';
+    // If there is an active trade, we are in ENTRY mode until it closes
+    if (activeTrade) return 'ENTRY';
     
+    // Otherwise show normal scanning status
     if (strategy === 'standard') {
       if (m5Confirmation) return 'CONFIRMATION';
       if (m15Setup) return 'SETUP';
@@ -107,7 +143,7 @@ export default function Home() {
       if (m5ScalpTrend !== 'range') return 'SCANNING'; // Have trend, looking for zone
       return 'SCANNING';
     }
-  }, [strategy, currentSignal, m5Confirmation, m15Setup, m5ScalpZone, m5ScalpTrend]);
+  }, [strategy, activeTrade, m5Confirmation, m15Setup, m5ScalpZone, m5ScalpTrend]);
 
   const handleDataUpdate = useCallback(
     (timeframe: string, candles: Candle[]) => {
@@ -125,7 +161,7 @@ export default function Home() {
       {/* Dashboard Bar */}
       <Dashboard
         status={status}
-        signal={currentSignal}
+        signal={activeTrade}
         strategy={strategy}
         onStrategyChange={setStrategy}
         currentPrice={candlesM1.length > 0 ? candlesM1[candlesM1.length - 1].close : undefined}
