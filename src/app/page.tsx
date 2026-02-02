@@ -1,9 +1,17 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import MultiTimeframeChart from '@/components/MultiTimeframeChart';
+import { useState, useCallback, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { Candle, TradingSignal } from '@/utils/types';
 import { generateTradingSignals } from '@/utils/signalGenerator';
+import { analyzeH1, analyzeM15, analyzeM5, analyzeM1 } from '@/utils/technicalAnalysis';
+import Dashboard from '@/components/Dashboard';
+import './Home.css';
+
+const MultiTimeframeChart = dynamic(() => import('@/components/MultiTimeframeChart'), {
+  ssr: false,
+  loading: () => <div className="chart-loading" />
+});
 
 export default function Home() {
   const [candlesM1, setCandlesM1] = useState<Candle[]>([]);
@@ -13,6 +21,27 @@ export default function Home() {
   const [signals, setSignals] = useState<TradingSignal[]>([]);
   const [latestSignal, setLatestSignal] = useState<TradingSignal | null>(null);
 
+  // Memoized Analysis Results
+  const h1Analysis = useMemo(() => {
+    if (candles1H.length < 50) return { bias: 'RANGE' as const, zones: [] };
+    return analyzeH1(candles1H);
+  }, [candles1H]);
+
+  const m15Analysis = useMemo(() => {
+    if (candlesM15.length < 50) return { status: 'WAIT' as const };
+    return analyzeM15(candlesM15, h1Analysis.bias, h1Analysis.zones);
+  }, [candlesM15, h1Analysis]);
+
+  const m5Analysis = useMemo(() => {
+    if (candlesM5.length < 20) return { confirmation: 'NO CONFIRMATION' as const };
+    return analyzeM5(candlesM5, h1Analysis.bias);
+  }, [candlesM5, h1Analysis.bias]);
+
+  const m1Analysis = useMemo(() => {
+    if (candlesM1.length < 10) return { trigger: 'WAIT' as const };
+    return analyzeM1(candlesM1, m5Analysis.confirmation);
+  }, [candlesM1, m5Analysis.confirmation]);
+
   const handleDataUpdate = useCallback(
     (timeframe: string, candles: Candle[]) => {
       // Update candle data for each timeframe
@@ -21,18 +50,24 @@ export default function Home() {
       else if (timeframe === 'M15') setCandlesM15(candles);
       else if (timeframe === '1H') setCandles1H(candles);
 
+      // Use the latest data for signal generation (including the update we just received)
+      const currentM1 = timeframe === 'M1' ? candles : candlesM1;
+      const currentM5 = timeframe === 'M5' ? candles : candlesM5;
+      const currentM15 = timeframe === 'M15' ? candles : candlesM15;
+      const current1H = timeframe === '1H' ? candles : candles1H;
+
       // Generate signals when we have data from all timeframes
       if (
-        candlesM1.length > 20 &&
-        candlesM5.length > 20 &&
-        candlesM15.length > 20 &&
-        candles1H.length > 50
+        currentM1.length > 20 &&
+        currentM5.length > 20 &&
+        currentM15.length > 20 &&
+        current1H.length > 50
       ) {
         const newSignals = generateTradingSignals(
-          candlesM1,
-          candlesM5,
-          candlesM15,
-          candles1H,
+          currentM1,
+          currentM5,
+          currentM15,
+          current1H,
           null // Fibonacci levels are calculated internally
         );
 
@@ -50,136 +85,72 @@ export default function Home() {
   );
 
   return (
-    <main className="h-screen bg-[#020617] p-2 flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="mb-2 px-4 py-3 bg-gradient-to-r from-slate-900 to-slate-800 rounded-lg border border-slate-700 flex-shrink-0">
-        <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-4">
-            {latestSignal && (
-              <div
-                className={`px-6 py-3 rounded-lg border-2 ${
-                  latestSignal.type === 'BUY'
-                    ? 'bg-emerald-500/20 border-emerald-500'
-                    : 'bg-red-500/20 border-red-500'
-                }`}
-              >
-                <div className="text-center">
-                  <div
-                    className={`text-3xl font-black ${
-                      latestSignal.type === 'BUY' ? 'text-emerald-400' : 'text-red-400'
-                    }`}
-                  >
-                    {latestSignal.type}
-                  </div>
-                  <div className="text-sm text-slate-300 mt-1">
-                    Confidence: {(latestSignal.confidence * 100).toFixed(0)}%
-                  </div>
-                  <div className="text-xs text-slate-400 mt-1">
-                    @ {latestSignal.price.toFixed(4)}
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {/* Trade Management */}
-            {latestSignal && (
-              <div className="flex flex-col gap-2">
-                 <div className="px-4 py-2 bg-slate-800/50 rounded-lg border border-slate-700 flex items-center justify-between gap-4">
-                    <span className="text-sm font-bold text-slate-400">TP</span>
-                    <span className="text-base font-mono text-emerald-400">{latestSignal.takeProfit.toFixed(4)}</span>
-                 </div>
-                 <div className="px-4 py-2 bg-slate-800/50 rounded-lg border border-slate-700 flex items-center justify-between gap-4">
-                    <span className="text-sm font-bold text-slate-400">SL</span>
-                    <span className="text-base font-mono text-red-400">{latestSignal.stopLoss.toFixed(4)}</span>
-                 </div>
-                 <div className="text-xs text-slate-500 text-right">
-                    R:R {latestSignal.riskRewardRatio}
-                 </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Signal Details */}
-        {latestSignal && (
-          <div className="mt-3 pt-3 border-t border-slate-700">
-            <div className="text-xs text-slate-400 mb-1 font-semibold">
-              Signal Reasons:
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {latestSignal.reasons.map((reason, idx) => (
-                <span
-                  key={idx}
-                  className="px-2 py-1 bg-slate-800 text-slate-300 rounded text-[10px] border border-slate-700"
-                >
-                  {reason}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+    <main className="main-layout">
+      {/* Dashboard Bar */}
+      <Dashboard
+        h1Bias={h1Analysis.bias}
+        m15Status={m15Analysis.status}
+        m5Confirmation={m5Analysis.confirmation}
+        m1Trigger={m1Analysis.trigger}
+        currentSignal={latestSignal}
+      />
 
       {/* 4-Chart Grid */}
-      <div className="grid grid-cols-2 grid-rows-2 gap-2 flex-1 min-h-0">
+      <div className="chart-grid">
         {/* Top Left - M1 Chart (Entry Timing) */}
-        <div className="w-full h-full">
-          <MultiTimeframeChart
-            symbol="R_50"
-            timeframe="M1"
-            title="M1 - Entry/Exit Timing"
-            onDataUpdate={(candles) => handleDataUpdate('M1', candles)}
+        <div className="chart-wrapper">
+          <MultiTimeframeChart 
+            timeframe="M1" 
+            title="1 MINUTE (ENTRY)"
+            onDataUpdate={(data) => handleDataUpdate('M1', data)}
             signals={signals}
           />
         </div>
 
-        {/* Top Right - M5 Chart */}
-        <div className="w-full h-full">
-          <MultiTimeframeChart
-            symbol="R_50"
-            timeframe="M5"
-            title="M5 - Momentum & Confirmation"
-            onDataUpdate={(candles) => handleDataUpdate('M5', candles)}
+        {/* Top Right - M5 Chart (Confirmation) */}
+        <div className="chart-wrapper">
+          <MultiTimeframeChart 
+            timeframe="M5" 
+            title="5 MINUTE (CONFIRMATION)"
+            onDataUpdate={(data) => handleDataUpdate('M5', data)}
             signals={signals}
           />
         </div>
 
-        {/* Bottom Left - M15 Chart */}
-        <div className="w-full h-full">
-          <MultiTimeframeChart
-            symbol="R_50"
-            timeframe="M15"
-            title="M15 - Market Structure"
-            onDataUpdate={(candles) => handleDataUpdate('M15', candles)}
+        {/* Bottom Left - M15 Chart (Setup) */}
+        <div className="chart-wrapper">
+          <MultiTimeframeChart 
+            timeframe="M15" 
+            title="15 MINUTE (SETUP)"
+            onDataUpdate={(data) => handleDataUpdate('M15', data)}
             signals={signals}
           />
         </div>
 
-        {/* Bottom Right - 1H Chart (Primary Trend) */}
-        <div className="w-full h-full">
-          <MultiTimeframeChart
-            symbol="R_50"
-            timeframe="1H"
-            title="1H - Primary Trend"
-            onDataUpdate={(candles) => handleDataUpdate('1H', candles)}
+        {/* Bottom Right - 1H Chart (Trend) */}
+        <div className="chart-wrapper">
+          <MultiTimeframeChart 
+            timeframe="1H" 
+            title="1 HOUR (TREND)"
+            onDataUpdate={(data) => handleDataUpdate('1H', data)}
             signals={signals}
           />
         </div>
       </div>
 
       {/* Footer Info */}
-      <div className="mt-2 px-4 py-1.5 bg-slate-900/50 rounded-lg border border-slate-800 flex-shrink-0">
-        <div className="flex items-center justify-between text-[10px] text-slate-500">
-          <div>
-            <span className="text-amber-400">◆</span> Fibonacci Levels: 38.2%, 50%,
+      <div className="footer-info">
+        <div className="footer-content">
+          <div className="legend-item">
+            <span className="legend-marker marker-amber">◆</span> Fibonacci Levels: 38.2%, 50%,
             61.8% (Golden Zone)
           </div>
-          <div>
-            <span className="text-emerald-400">●</span> Bullish Patterns |{' '}
-            <span className="text-red-400">●</span> Bearish Patterns
+          <div className="legend-item">
+            <span className="legend-marker marker-emerald">●</span> Bullish Patterns |{' '}
+            <span className="legend-marker marker-red">●</span> Bearish Patterns
           </div>
-          <div>
-            <span className="text-slate-400">━</span> Support/Resistance Zones
+          <div className="legend-item">
+            <span className="legend-marker marker-slate">━</span> Support/Resistance Zones
           </div>
         </div>
       </div>

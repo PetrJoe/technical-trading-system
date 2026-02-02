@@ -18,6 +18,7 @@ import { getRecentFibonacci } from '@/utils/fibonacci';
 import { analyzeTrend, findSupportResistanceZones } from '@/utils/technicalAnalysis';
 import { detectCandlestickPatterns } from '@/utils/candlestickPatterns';
 import WebSocketService from '@/services/WebSocketService';
+import './Chart.css';
 
 interface MultiTimeframeChartProps {
   symbol?: string;
@@ -25,7 +26,6 @@ interface MultiTimeframeChartProps {
   title: string;
   onDataUpdate?: (candles: Candle[]) => void;
   signals?: TradingSignal[];
-  statusOverlay?: string;
 }
 
 const GRANULARITY_MAP: Record<Timeframe, number> = {
@@ -41,7 +41,6 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
   title,
   onDataUpdate,
   signals = [],
-  statusOverlay,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -363,14 +362,7 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
               {title}
             </span>
           </div>
-          {statusOverlay && (
-            <div className="px-3 py-1 bg-indigo-500/20 backdrop-blur-sm rounded-lg border border-indigo-500/30">
-              <span className="text-xs font-bold text-indigo-200 uppercase">
-                {statusOverlay}
-              </span>
-            </div>
-          )}
-          {trendInfo && !statusOverlay && (
+          {trendInfo && (
             <div className="px-3 py-1 bg-slate-900/80 backdrop-blur-sm rounded-lg border border-white/10">
               <span className="text-xs font-medium text-slate-300">
                 {trendInfo}

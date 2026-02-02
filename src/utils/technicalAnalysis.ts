@@ -74,6 +74,27 @@ export function analyzeTrend(
 }
 
 /**
+ * Analyze trend bias specifically for H1 strategy (EMA 50 & 200)
+ */
+export function analyzeTrendBias(candles: Candle[]): 'bullish' | 'bearish' | 'range' {
+  if (candles.length < 200) return 'range';
+
+  const ema50 = calculateEMA(candles, 50);
+  const ema200 = calculateEMA(candles, 200);
+  const currentPrice = candles[candles.length - 1].close;
+
+  if (!ema50 || !ema200) return 'range';
+
+  if (ema50 > ema200 && currentPrice > ema50 && currentPrice > ema200) {
+    return 'bullish';
+  } else if (ema50 < ema200 && currentPrice < ema50 && currentPrice < ema200) {
+    return 'bearish';
+  }
+  
+  return 'range';
+}
+
+/**
  * Find support and resistance zones using pivot points
  */
 export function findSupportResistanceZones(
@@ -295,4 +316,156 @@ export function detectMomentum(candles: Candle[]): 'bullish' | 'bearish' | 'neut
   }
 
   return 'neutral';
+}
+
+/**
+ * H1 Timeframe Analysis - Trend Bias
+ */
+export function analyzeH1(candles: Candle[]): {
+  bias: 'BULLISH' | 'BEARISH' | 'RANGE';
+  zones: SupportResistanceZone[];
+} {
+  if (candles.length < 200) return { bias: 'RANGE', zones: [] };
+
+  const ema50 = calculateEMA(candles, 50);
+  const ema200 = calculateEMA(candles, 200);
+  const currentPrice = candles[candles.length - 1].close;
+  
+  // Find zones
+  const zones = findSupportResistanceZones(candles, 100);
+
+  if (!ema50 || !ema200) return { bias: 'RANGE', zones };
+
+  let bias: 'BULLISH' | 'BEARISH' | 'RANGE' = 'RANGE';
+
+  if (ema50 > ema200 && currentPrice > ema50 && currentPrice > ema200) {
+    bias = 'BULLISH';
+  } else if (ema50 < ema200 && currentPrice < ema50 && currentPrice < ema200) {
+    bias = 'BEARISH';
+  } else {
+    bias = 'RANGE';
+  }
+  
+  return { bias, zones };
+}
+
+/**
+ * M15 Timeframe Analysis - Setup Detection
+ */
+export function analyzeM15(
+  candles: Candle[], 
+  h1Bias: 'BULLISH' | 'BEARISH' | 'RANGE',
+  h1Zones: SupportResistanceZone[]
+): { status: 'VALID' | 'WAIT' | 'INVALID'; zone?: SupportResistanceZone } {
+  if (candles.length < 50) return { status: 'INVALID' };
+
+  const ema20 = calculateEMA(candles, 20);
+  const ema50 = calculateEMA(candles, 50);
+  const rsi = calculateRSI(candles, 14);
+  const currentPrice = candles[candles.length - 1].close;
+
+  if (!ema20 || !ema50 || !rsi) return { status: 'INVALID' };
+
+  // Scalping Logic: Strong Trend Alignment
+  // We don't always need a deep pullback to H1 zone for scalping.
+  // If M15 is strongly trending in H1 direction, it's a valid context.
+  
+  if (h1Bias === 'BULLISH') {
+    const isTrending = ema20 > ema50 && currentPrice > ema20; // Strong momentum
+    const isRsiValid = rsi >= 40 && rsi <= 70; // Not overbought yet
+    const nearZone = isPriceNearZone(currentPrice, h1Zones.filter(z => z.type === 'support'), 0.003);
+    
+    if ((isTrending || nearZone) && isRsiValid) {
+        return { status: 'VALID', zone: nearZone || undefined };
+    }
+    return { status: 'WAIT' };
+  } 
+  else if (h1Bias === 'BEARISH') {
+    const isTrending = ema20 < ema50 && currentPrice < ema20; // Strong momentum
+    const isRsiValid = rsi >= 30 && rsi <= 60; // Not oversold yet
+    const nearZone = isPriceNearZone(currentPrice, h1Zones.filter(z => z.type === 'resistance'), 0.003);
+    
+    if ((isTrending || nearZone) && isRsiValid) {
+        return { status: 'VALID', zone: nearZone || undefined };
+    }
+    return { status: 'WAIT' };
+  }
+
+  return { status: 'INVALID' };
+}
+
+/**
+ * M5 Timeframe Analysis - Confirmation
+ */
+export function analyzeM5(
+  candles: Candle[],
+  h1Bias: 'BULLISH' | 'BEARISH' | 'RANGE'
+): { confirmation: 'BUY BIAS' | 'SELL BIAS' | 'NO CONFIRMATION' } {
+  if (candles.length < 21) return { confirmation: 'NO CONFIRMATION' };
+
+  const ema9 = calculateEMA(candles, 9);
+  const ema21 = calculateEMA(candles, 21);
+  const currentPrice = candles[candles.length - 1].close;
+
+  if (!ema9 || !ema21) return { confirmation: 'NO CONFIRMATION' };
+
+  if (h1Bias === 'BULLISH') {
+      if (currentPrice > ema9 && ema9 > ema21) {
+          return { confirmation: 'BUY BIAS' };
+      }
+  } else if (h1Bias === 'BEARISH') {
+      if (currentPrice < ema9 && ema9 < ema21) {
+          return { confirmation: 'SELL BIAS' };
+      }
+  }
+
+  return { confirmation: 'NO CONFIRMATION' };
+}
+
+/**
+ * M1 Timeframe Analysis - Entry Trigger
+ */
+export function analyzeM1(
+  candles: Candle[],
+  m5Confirmation: 'BUY BIAS' | 'SELL BIAS' | 'NO CONFIRMATION'
+): { trigger: 'BUY' | 'SELL' | 'WAIT' } {
+  if (candles.length < 10) return { trigger: 'WAIT' };
+
+  const lastCandle = candles[candles.length - 1];
+  const prevCandle = candles[candles.length - 2];
+
+  // 1. Engulfing
+  const isBullishEngulfing = 
+    prevCandle.close < prevCandle.open && 
+    lastCandle.close > lastCandle.open && 
+    lastCandle.close > prevCandle.open && 
+    lastCandle.open < prevCandle.close;
+
+  const isBearishEngulfing = 
+    prevCandle.close > prevCandle.open && 
+    lastCandle.close < lastCandle.open && 
+    lastCandle.close < prevCandle.open && 
+    lastCandle.open > prevCandle.close;
+
+  // 2. Momentum (3 candles)
+  const last3 = candles.slice(-3);
+  const is3Bullish = last3.every(c => c.close > c.open);
+  const is3Bearish = last3.every(c => c.close < c.open);
+
+  // 3. Pinbar / Hammer / Shooting Star
+  const bodySize = Math.abs(lastCandle.close - lastCandle.open);
+  const totalSize = lastCandle.high - lastCandle.low;
+  const upperWick = lastCandle.high - Math.max(lastCandle.open, lastCandle.close);
+  const lowerWick = Math.min(lastCandle.open, lastCandle.close) - lastCandle.low;
+  
+  const isHammer = lowerWick > 2 * bodySize && upperWick < bodySize; // Bullish pinbar
+  const isShootingStar = upperWick > 2 * bodySize && lowerWick < bodySize; // Bearish pinbar
+
+  if (m5Confirmation === 'BUY BIAS') {
+    if (isBullishEngulfing || is3Bullish || isHammer) return { trigger: 'BUY' };
+  } else if (m5Confirmation === 'SELL BIAS') {
+    if (isBearishEngulfing || is3Bearish || isShootingStar) return { trigger: 'SELL' };
+  }
+
+  return { trigger: 'WAIT' };
 }

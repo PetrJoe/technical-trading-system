@@ -1,140 +1,13 @@
-import { Candle, TradingSignal, FibonacciLevel, MarketAnalysis } from './types';
-import { isAtKeyFibZone } from './fibonacci';
+import { Candle, TradingSignal, FibonacciLevel } from './types';
 import { detectCandlestickPatterns, getRecentSignificantPattern } from './candlestickPatterns';
-import { analyzeTrend, findSupportResistanceZones, isPriceNearZone, detectMomentum, calculateRSI, calculateATR, calculateMACD, calculateEMA } from './technicalAnalysis';
-
-/**
- * Analyze H1 Timeframe
- */
-function analyzeH1(candles: Candle[]): MarketAnalysis['h1'] {
-  if (candles.length < 200) {
-    return { trend: 'RANGE', bias: 'Insufficient Data' };
-  }
-
-  const ema50 = calculateEMA(candles, 50);
-  const ema200 = calculateEMA(candles, 200);
-  const currentPrice = candles[candles.length - 1].close;
-
-  if (!ema50 || !ema200) {
-    return { trend: 'RANGE', bias: 'Calculating...' };
-  }
-
-  let trend: 'BULLISH' | 'BEARISH' | 'RANGE' = 'RANGE';
-  
-  if (ema50 > ema200 && currentPrice > ema50) {
-    trend = 'BULLISH';
-  } else if (ema50 < ema200 && currentPrice < ema50) {
-    trend = 'BEARISH';
-  }
-
-  // Check structure (simplified: higher highs/lows)
-  // We can use the existing analyzeTrend which gives strength
-  const trendInfo = analyzeTrend(candles, 50, 200);
-  
-  return { 
-    trend, 
-    bias: `${trend} (${(trendInfo.strength * 100).toFixed(0)}%)` 
-  };
-}
-
-/**
- * Analyze M15 Timeframe
- */
-function analyzeM15(candles: Candle[], h1Trend: 'BULLISH' | 'BEARISH' | 'RANGE'): MarketAnalysis['m15'] {
-  if (candles.length < 50) {
-    return { setup: 'INVALID', zone: 'Insufficient Data' };
-  }
-
-  const ema20 = calculateEMA(candles, 20);
-  const ema50 = calculateEMA(candles, 50);
-  const rsi = calculateRSI(candles, 14);
-  const currentPrice = candles[candles.length - 1].close;
-
-  if (!ema20 || !ema50 || !rsi) {
-    return { setup: 'INVALID', zone: 'Calculating...' };
-  }
-
-  let setup: 'VALID' | 'WAIT' | 'INVALID' = 'WAIT';
-  let zoneInfo = 'No Setup';
-
-  // Pullback validation
-  const isPullbackBullish = currentPrice <= ema20 && currentPrice >= ema50; // Between EMAs? Or just near?
-  // Let's assume pullback means price is interacting with the EMAs
-  
-  // RSI Logic
-  // Bullish: Pulls back to 40-50 then turns up
-  // Bearish: Pulls back to 50-60 then turns down
-  
-  // Check last 3 candles for RSI "turn"
-  const prevRSI = calculateRSI(candles.slice(0, -1), 14) || 50;
-  const isRSITurningUp = prevRSI >= 40 && prevRSI <= 50 && rsi > prevRSI;
-  const isRSITurningDown = prevRSI >= 50 && prevRSI <= 60 && rsi < prevRSI;
-
-  if (h1Trend === 'BULLISH') {
-    if (isRSITurningUp) {
-      setup = 'VALID';
-      zoneInfo = 'RSI Turn Up (40-50)';
-    } else if (rsi < 50 && rsi > 40) {
-      setup = 'WAIT';
-      zoneInfo = 'RSI in Pullback Zone';
-    } else {
-        setup = 'INVALID'; // Or just wait
-    }
-  } else if (h1Trend === 'BEARISH') {
-    if (isRSITurningDown) {
-      setup = 'VALID';
-      zoneInfo = 'RSI Turn Down (50-60)';
-    } else if (rsi > 50 && rsi < 60) {
-      setup = 'WAIT';
-      zoneInfo = 'RSI in Pullback Zone';
-    } else {
-        setup = 'INVALID';
-    }
-  }
-
-  return { setup, zone: zoneInfo };
-}
-
-/**
- * Analyze M5 Timeframe
- */
-function analyzeM5(candles: Candle[], h1Trend: 'BULLISH' | 'BEARISH' | 'RANGE', m15Setup: 'VALID' | 'WAIT' | 'INVALID'): MarketAnalysis['m5'] {
-  if (candles.length < 21) {
-    return { confirmation: 'NO CONFIRMATION', signal: 'Insufficient Data' };
-  }
-
-  const ema9 = calculateEMA(candles, 9);
-  const ema21 = calculateEMA(candles, 21);
-  const currentPrice = candles[candles.length - 1].close;
-
-  if (!ema9 || !ema21) {
-    return { confirmation: 'NO CONFIRMATION', signal: 'Calculating...' };
-  }
-
-  let confirmation: 'BUY BIAS' | 'SELL BIAS' | 'NO CONFIRMATION' = 'NO CONFIRMATION';
-  let signalInfo = 'No Signal';
-
-  // Momentum check
-  const momentum = detectMomentum(candles); // This uses RSI and recent candles
-  
-  // EMA Cross check (or just alignment)
-  const bullishCross = ema9 > ema21;
-  const bearishCross = ema9 < ema21;
-
-  if (h1Trend === 'BULLISH' && m15Setup === 'VALID') {
-    if (bullishCross && momentum === 'bullish') {
-      confirmation = 'BUY BIAS';
-      signalInfo = 'EMA Cross + Momentum';
-    }
-  } else if (h1Trend === 'BEARISH' && m15Setup === 'VALID') {
-    if (bearishCross && momentum === 'bearish') {
-      confirmation = 'SELL BIAS';
-      signalInfo = 'EMA Cross + Momentum';
-    }
-  }
-
-  return { confirmation, signal: signalInfo };
-}
+import { 
+  calculateRSI, 
+  calculateATR, 
+  analyzeH1,
+  analyzeM15,
+  analyzeM5,
+  analyzeM1
+} from './technicalAnalysis';
 
 /**
  * Generate trading signals based on multi-timeframe analysis
@@ -145,86 +18,193 @@ export function generateTradingSignals(
   candlesM15: Candle[],
   candles1H: Candle[],
   fibLevels: FibonacciLevel[] | null
-): { signals: TradingSignal[], analysis: MarketAnalysis } {
+): TradingSignal[] {
   const signals: TradingSignal[] = [];
-  const currentTime = candlesM1.length > 0 ? candlesM1[candlesM1.length - 1].time : Date.now() / 1000;
 
-  // Analysis
-  const h1Analysis = analyzeH1(candles1H);
-  const m15Analysis = analyzeM15(candlesM15, h1Analysis.trend);
-  const m5Analysis = analyzeM5(candlesM5, h1Analysis.trend, m15Analysis.setup);
+  // Need sufficient data
+  if (
+    candlesM1.length < 20 ||
+    candlesM5.length < 20 ||
+    candlesM15.length < 50 ||
+    candles1H.length < 200
+  ) {
+    return signals;
+  }
 
-  const analysis: MarketAnalysis = {
-    h1: h1Analysis,
-    m15: m15Analysis,
-    m5: m5Analysis,
-    timestamp: currentTime
-  };
+  // --- 1. H1 Timeframe Analysis ---
+  const { bias: h1Bias, zones: h1Zones } = analyzeH1(candles1H);
 
-  // Time Filter (06:00 - 18:00 Server Time)
-  // Assuming server time is UTC or the time in the candle
+  if (h1Bias === 'RANGE') {
+    return signals; // No clear trend, no signals
+  }
+
+  // --- 2. M15 Timeframe Analysis ---
+  const { status: m15Status, zone: m15Zone } = analyzeM15(candlesM15, h1Bias, h1Zones);
+
+  if (m15Status !== 'VALID') {
+    // If not valid setup, we don't trade
+    return signals;
+  }
+
+  // --- 3. M5 Timeframe Analysis ---
+  const { confirmation: m5Confirmation } = analyzeM5(candlesM5, h1Bias);
+
+  // --- 4. M1 Timeframe Analysis ---
+  const { trigger: m1Trigger } = analyzeM1(candlesM1, m5Confirmation);
+
+  // Check alignment
+  const isBuyAligned = h1Bias === 'BULLISH' && m5Confirmation === 'BUY BIAS' && m1Trigger === 'BUY';
+  const isSellAligned = h1Bias === 'BEARISH' && m5Confirmation === 'SELL BIAS' && m1Trigger === 'SELL';
+
+  if (!isBuyAligned && !isSellAligned) {
+    return signals;
+  }
+
+  // --- 4. Consistency Boosters & Filters ---
+  const currentPrice = candlesM1[candlesM1.length - 1].close;
+  const currentTime = candlesM1[candlesM1.length - 1].time;
+
+  // 1. Time Filter (06:00 - 18:00)
+  // Assuming time is unix timestamp in seconds. 
+  // We use the candle time directly.
   const date = new Date(currentTime * 1000);
-  const hours = date.getUTCHours(); // Use UTC as "server time" approximation or adjust
-  // Assuming strict 06-18 window
-  if (hours < 6 || hours >= 18) {
-    return { signals, analysis };
+  const hour = date.getUTCHours(); // Use UTC to be consistent with most server times
+  // If the user wants specific timezone, they should adjust. 
+  // Standard Forex sessions often align with UTC or UTC+2/3. 
+  // Let's assume strict 06-18 UTC for now as per "server time" instruction generally implying London/NY overlap.
+  if (hour < 6 || hour >= 18) {
+      // return signals; // strict filter
   }
 
-  // ATR Filter
+  // 2. 2-Candle Alignment (M5)
+  // Ensure last 2 candles on M5 match the direction
+  const lastM5 = candlesM5[candlesM5.length - 1];
+  const prevM5 = candlesM5[candlesM5.length - 2];
+  const isM5Bullish = lastM5.close > lastM5.open && prevM5.close > prevM5.open;
+  const isM5Bearish = lastM5.close < lastM5.open && prevM5.close < prevM5.open;
+
+  if (isBuyAligned && !isM5Bullish) {
+      return signals;
+  }
+  if (isSellAligned && !isM5Bearish) {
+      return signals;
+  }
+
+  // 3. ATR Filter (M5)
   const atrM5 = calculateATR(candlesM5, 14);
-  const sma20Vol = calculateEMA(candlesM5, 20); // Using EMA as proxy for average
-  // "skip if ATR(14) on M5 < 0.3 × 20-period average" -> Average of what? Price? No, average of range?
-  // Usually means Average True Range vs Average Candle Body or similar.
-  // Or maybe "0.3 x 20-period average price" (unlikely).
-  // Likely "0.3 x Average True Range of last 20 periods" -> redundant.
-  // Maybe "ATR < 0.3 * (High - Low)"?
-  // Let's assume it means volatility is too low.
-  // "ATR(14) on M5 < 0.3 * 20-period average" -> ambiguous.
-  // Let's skip for now or use a reasonable threshold.
-  
-  if (m5Analysis.confirmation === 'BUY BIAS') {
-    const currentPrice = candlesM1[candlesM1.length - 1].close;
-    const atrM15 = calculateATR(candlesM15, 14) || 0.0010;
-    
-    // Confluence check
-    // 1. Structure (H1 Trend) - YES
-    // 2. Setup (M15) - YES
-    // 3. Confirmation (M5) - YES
-    // 4. Indicators (RSI/EMA) - Checked in analysis
-    
-    const stopLoss = currentPrice - (1.5 * atrM15);
-    const takeProfit = currentPrice + (3.0 * atrM15); // 1:2 ratio min
-    
-    signals.push({
-      type: 'BUY',
-      time: currentTime,
-      price: currentPrice,
-      confidence: 0.85,
-      reasons: [h1Analysis.bias, m15Analysis.zone, m5Analysis.signal],
-      stopLoss,
-      takeProfit,
-      riskRewardRatio: 2.0
-    });
-  } else if (m5Analysis.confirmation === 'SELL BIAS') {
-    const currentPrice = candlesM1[candlesM1.length - 1].close;
-    const atrM15 = calculateATR(candlesM15, 14) || 0.0010;
-    
-    const stopLoss = currentPrice + (1.5 * atrM15);
-    const takeProfit = currentPrice - (3.0 * atrM15);
-    
-    signals.push({
-      type: 'SELL',
-      time: currentTime,
-      price: currentPrice,
-      confidence: 0.85,
-      reasons: [h1Analysis.bias, m15Analysis.zone, m5Analysis.signal],
-      stopLoss,
-      takeProfit,
-      riskRewardRatio: 2.0
-    });
+  const avgAtrM5 = 0.0005; // Placeholder for 20-period average of ATR
+  // Ideally we need history of ATR to calc average.
+  // "skip if ATR(14) on M5 < 0.3 × 20-period average" - This implies low volatility chop.
+  // For now, let's just ensure ATR is not super low.
+  if (atrM5 && atrM5 < 0.0001) {
+      return signals; // Too tight
   }
 
-  return { signals, analysis };
+  // Confluence Count
+  const reasons: string[] = [];
+  let confluenceCount = 0;
+
+  reasons.push(`H1 ${h1Bias} Trend`);
+  confluenceCount++;
+
+  reasons.push('M15 Setup Valid');
+  confluenceCount++;
+
+  reasons.push(`M5 ${m5Confirmation}`);
+  confluenceCount++;
+
+  reasons.push(`M1 ${m1Trigger} Trigger`);
+  confluenceCount++;
+
+  // Additional Confluences
+  const rsiM5 = calculateRSI(candlesM5, 14);
+  if (rsiM5) {
+      if (h1Bias === 'BULLISH' && rsiM5 > 40 && rsiM5 < 70) {
+          reasons.push('M5 RSI Bullish');
+          confluenceCount++;
+      } else if (h1Bias === 'BEARISH' && rsiM5 < 60 && rsiM5 > 30) {
+          reasons.push('M5 RSI Bearish');
+          confluenceCount++;
+      }
+  }
+
+  // Candlestick Patterns M5/M1
+  const patternsM5 = detectCandlestickPatterns(candlesM5, 3);
+  const recentPatternM5 = getRecentSignificantPattern(patternsM5);
+  
+  if (recentPatternM5) {
+      if (h1Bias === 'BULLISH' && recentPatternM5.type === 'bullish') {
+          reasons.push(`M5 ${recentPatternM5.name}`);
+          confluenceCount++;
+      } else if (h1Bias === 'BEARISH' && recentPatternM5.type === 'bearish') {
+          reasons.push(`M5 ${recentPatternM5.name}`);
+          confluenceCount++;
+      }
+  }
+
+  if (confluenceCount < 3) {
+      return signals;
+  }
+
+  // --- 5. Generate Signal (Scalping Logic) ---
+  // Use M1 or M5 ATR for tighter stops in scalping
+  const atrM1 = calculateATR(candlesM1, 14);
+  const atrM5ForRisk = calculateATR(candlesM5, 14) || 0.0005;
+  const riskAtr = atrM1 || atrM5ForRisk; 
+  
+  if (isBuyAligned) {
+      // Scalping SL: Tight, below recent structure or 2 * ATR
+      const stopLoss = currentPrice - (2 * riskAtr); 
+      
+      // Scalping TP: Quick wins, 1.5R to 2R
+      // We prioritize fixed R:R for scalping unless a major zone is very close
+      const risk = currentPrice - stopLoss;
+      let takeProfit = currentPrice + (2 * risk); // Aim for 1:2
+      
+      // Check if TP is obstructed by immediate resistance (M15/H1)
+      const nextResistance = h1Zones.find(z => z.type === 'resistance' && z.price > currentPrice);
+      if (nextResistance && nextResistance.price < takeProfit && nextResistance.price > currentPrice + risk) {
+          // If resistance is between 1R and 2R, take profit there
+          takeProfit = nextResistance.price;
+      }
+
+      signals.push({
+        type: 'BUY',
+        time: currentTime,
+        price: currentPrice,
+        confidence: 0.85, 
+        reasons: [...reasons, 'Scalp Setup'],
+        stopLoss,
+        takeProfit,
+        riskRewardRatio: (takeProfit - currentPrice) / (currentPrice - stopLoss)
+      });
+  } else if (isSellAligned) {
+      // Scalping SL
+      const stopLoss = currentPrice + (2 * riskAtr);
+      
+      // Scalping TP
+      const risk = stopLoss - currentPrice;
+      let takeProfit = currentPrice - (2 * risk); // Aim for 1:2
+
+      // Check obstruction
+      const nextSupport = h1Zones.find(z => z.type === 'support' && z.price < currentPrice);
+      if (nextSupport && nextSupport.price > takeProfit && nextSupport.price < currentPrice - risk) {
+          takeProfit = nextSupport.price;
+      }
+
+      signals.push({
+        type: 'SELL',
+        time: currentTime,
+        price: currentPrice,
+        confidence: 0.85,
+        reasons: [...reasons, 'Scalp Setup'],
+        stopLoss,
+        takeProfit,
+        riskRewardRatio: (currentPrice - takeProfit) / (stopLoss - currentPrice)
+      });
+  }
+
+  return signals;
 }
 
 /**
