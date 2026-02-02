@@ -201,6 +201,76 @@ export function isPriceNearZone(
   return null;
 }
 
+
+/**
+ * Find recent swing high and low points
+ */
+export function findSwingPoints(candles: Candle[], lookback: number = 20) {
+  if (candles.length < lookback) return null;
+  
+  const relevantCandles = candles.slice(-lookback);
+  
+  let highestHigh = -Infinity;
+  let lowestLow = Infinity;
+  let highIndex = -1;
+  let lowIndex = -1;
+
+  relevantCandles.forEach((c, i) => {
+    if (c.high > highestHigh) {
+      highestHigh = c.high;
+      highIndex = i;
+    }
+    if (c.low < lowestLow) {
+      lowestLow = c.low;
+      lowIndex = i;
+    }
+  });
+
+  return {
+    high: highestHigh,
+    low: lowestLow,
+    highIndex, // Relative to slice
+    lowIndex   // Relative to slice
+  };
+}
+
+/**
+ * Calculate Fibonacci Retracement Levels
+ */
+export function calculateFibLevels(high: number, low: number, trend: 'bullish' | 'bearish') {
+  const diff = high - low;
+  
+  if (trend === 'bullish') {
+    // Retracing down from High. 0% is High, 100% is Low.
+    // Entry Zone: 50% to 61.8% retracement
+    return {
+      level0: high,              // 0% (Target)
+      level236: high - (diff * 0.236),
+      level382: high - (diff * 0.382),
+      level50: high - (diff * 0.5),
+      level618: high - (diff * 0.618),
+      level786: high - (diff * 0.786),
+      level100: low,             // 100% (Stop/Invalidation)
+      extension127: high + (diff * 0.27), // TP 1
+      extension1618: high + (diff * 0.618) // TP 2
+    };
+  } else {
+    // Retracing up from Low. 0% is Low, 100% is High.
+    // Entry Zone: 50% to 61.8% retracement
+    return {
+      level0: low,               // 0% (Target)
+      level236: low + (diff * 0.236),
+      level382: low + (diff * 0.382),
+      level50: low + (diff * 0.5),
+      level618: low + (diff * 0.618),
+      level786: low + (diff * 0.786),
+      level100: high,            // 100% (Stop/Invalidation)
+      extension127: low - (diff * 0.27),  // TP 1
+      extension1618: low - (diff * 0.618) // TP 2
+    };
+  }
+}
+
 /**
  * Calculate Average True Range (volatility measure)
  */

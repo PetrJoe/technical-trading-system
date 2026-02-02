@@ -86,8 +86,8 @@ export default function Home() {
   // 3. M1 Entry (Scalp)
   const m1ScalpEntry = useMemo(() => {
     if (strategy !== 'scalping') return null;
-    return detectM1ScalpEntry(candlesM1, m5ScalpTrend, scalpZones);
-  }, [candlesM1, m5ScalpTrend, scalpZones, strategy]);
+    return detectM1ScalpEntry(candlesM1, m5ScalpTrend, scalpZones, candlesM5);
+  }, [candlesM1, m5ScalpTrend, scalpZones, strategy, candlesM5]);
 
   // Determine Overall Status & Signal (Potential New Signal)
   const potentialSignal = useMemo(() => {

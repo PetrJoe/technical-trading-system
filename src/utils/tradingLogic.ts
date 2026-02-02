@@ -1,5 +1,5 @@
 import { Candle, SupportResistanceZone, TradingSignal } from './types';
-import { findSupportResistanceZones, calculateEMA, calculateRSI } from './technicalAnalysis';
+import { findSupportResistanceZones, calculateEMA, calculateRSI, findSwingPoints, calculateFibLevels } from './technicalAnalysis';
 
 // --- Helper Functions ---
 
@@ -389,42 +389,121 @@ export function detectM5ScalpZone(
 export function detectM1ScalpEntry(
   candles: Candle[],
   trend: 'bullish' | 'bearish' | 'range',
-  zones: SupportResistanceZone[]
+  zones: SupportResistanceZone[],
+  m5Candles: Candle[] = []
 ): TradingSignal | null {
-  if (candles.length < 20 || zones.length === 0) return null;
+  if (candles.length < 20) return null;
 
   const lastCandle = candles[candles.length - 1];
   const currentPrice = lastCandle.close;
-
-  // 1. Identify Pip Size (Heuristic)
   const pipSize = currentPrice < 50 ? 0.0001 : 0.01;
 
-  // 2. Check RSI Filter
+  // 1. RSI Filter
   const rsi = calculateRSI(candles, 14);
   const rsiValue = rsi || 50; 
 
-  // 3. Find Nearest Zone
+  // 2. Calculate Fibonacci Levels (M5)
+  let fibSignal: TradingSignal | null = null;
+  
+  if (m5Candles.length >= 20 && trend !== 'range') {
+     const swings = findSwingPoints(m5Candles, 50);
+     
+     if (swings) {
+        const fibs = calculateFibLevels(swings.high, swings.low, trend);
+        
+        // Check if price is in Golden Zone (50% - 61.8%)
+        // Note: In bullish, level50 > level618 (price descending)
+        // In bearish, level50 < level618 (price ascending)
+        
+        let inGoldenZone = false;
+        const tolerance = 0.0005; // Tight tolerance for exact zone
+
+        if (trend === 'bullish') {
+           // Price retracing down. 50% is higher than 61.8%
+           // e.g. High 100, Low 0. 50% = 50, 61.8% = 38.2. Wait.
+           // calculateFibLevels returns: 
+           // Bullish: 0% = High, 100% = Low.
+           // level50 = High - 0.5*Diff
+           // level618 = High - 0.618*Diff
+           // So level50 > level618.
+           // We want price <= level50 and price >= level618
+           inGoldenZone = currentPrice <= fibs.level50 * (1 + tolerance) && 
+                          currentPrice >= fibs.level618 * (1 - tolerance);
+        } else {
+           // Bearish: 0% = Low, 100% = High.
+           // level50 = Low + 0.5*Diff
+           // level618 = Low + 0.618*Diff
+           // So level50 < level618.
+           // We want price >= level50 and price <= level618
+           inGoldenZone = currentPrice >= fibs.level50 * (1 - tolerance) && 
+                          currentPrice <= fibs.level618 * (1 + tolerance);
+        }
+
+        if (inGoldenZone) {
+            // Check M1 Confirmation
+            const range = lastCandle.high - lastCandle.low;
+            
+            if (trend === 'bullish') {
+               const lowerWick = Math.min(lastCandle.open, lastCandle.close) - lastCandle.low;
+               const isRejection = lowerWick > 0.3 * range;
+               const isBullishCandle = lastCandle.close > lastCandle.open;
+               const rsiOversold = rsiValue < 45;
+
+               if ((isRejection || isBullishCandle) && rsiOversold) {
+                  fibSignal = {
+                     type: 'BUY',
+                     price: currentPrice,
+                     time: lastCandle.time,
+                     stopLoss: fibs.level786, // SL below 61.8% (at 78.6%)
+                     takeProfit: fibs.level0, // TP at Recent High (0%)
+                     reason: 'Fib 50-61.8% Retracement'
+                  };
+               }
+            } else {
+               const upperWick = lastCandle.high - Math.max(lastCandle.open, lastCandle.close);
+               const isRejection = upperWick > 0.3 * range;
+               const isBearishCandle = lastCandle.close < lastCandle.open;
+               const rsiOverbought = rsiValue > 55;
+
+               if ((isRejection || isBearishCandle) && rsiOverbought) {
+                  fibSignal = {
+                     type: 'SELL',
+                     price: currentPrice,
+                     time: lastCandle.time,
+                     stopLoss: fibs.level786, // SL above 61.8% (at 78.6%)
+                     takeProfit: fibs.level0, // TP at Recent Low (0%)
+                     reason: 'Fib 50-61.8% Retracement'
+                  };
+               }
+            }
+        }
+     }
+  }
+
+  // If Fib signal found, return it
+  if (fibSignal) return fibSignal;
+
+  // Fallback to S/R logic if no Fib setup
+  // ... Existing S/R Logic ...
   const nearestZone = zones.find(z => 
     Math.abs(currentPrice - z.price) / currentPrice < 0.0015 
   );
 
   if (!nearestZone) return null;
 
-  let signal: TradingSignal | null = null;
-
   // --- BUY SETUP (Support Bounce) ---
   if (nearestZone.type === 'support') {
     const range = lastCandle.high - lastCandle.low;
     const lowerWick = Math.min(lastCandle.open, lastCandle.close) - lastCandle.low;
-    const isRejection = lowerWick > 0.3 * range; // At least 30% wick
+    const isRejection = lowerWick > 0.3 * range;
     const isBullish = lastCandle.close > lastCandle.open;
-    const rsiCondition = rsiValue < 45; // Relaxed from 30 for more frequency
+    const rsiCondition = rsiValue < 45;
 
     if (isRejection && isBullish && rsiCondition) {
        const slPips = 5;
        const tpPips = 10;
        
-       signal = {
+       return {
          type: 'BUY',
          price: currentPrice,
          time: lastCandle.time,
@@ -441,13 +520,13 @@ export function detectM1ScalpEntry(
     const upperWick = lastCandle.high - Math.max(lastCandle.open, lastCandle.close);
     const isRejection = upperWick > 0.3 * range;
     const isBearish = lastCandle.close < lastCandle.open;
-    const rsiCondition = rsiValue > 55; // Relaxed from 70
+    const rsiCondition = rsiValue > 55;
 
     if (isRejection && isBearish && rsiCondition) {
        const slPips = 5;
        const tpPips = 10;
        
-       signal = {
+       return {
          type: 'SELL',
          price: currentPrice,
          time: lastCandle.time,
@@ -458,5 +537,5 @@ export function detectM1ScalpEntry(
     }
   }
 
-  return signal;
+  return null;
 }
