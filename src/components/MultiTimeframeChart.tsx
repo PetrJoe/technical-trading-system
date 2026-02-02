@@ -353,26 +353,26 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
   }, [symbol, timeframe]);
 
   return (
-    <div className="relative w-full h-full bg-[#020617] border border-slate-800 rounded-lg overflow-hidden">
+    <div className="chart-container">
       {/* Header */}
-      <div className="absolute top-2 left-2 right-2 z-10 flex justify-between items-start pointer-events-none">
-        <div className="flex flex-col gap-1">
-          <div className="px-3 py-1.5 bg-slate-900/80 backdrop-blur-sm rounded-lg border border-white/10">
-            <span className="text-sm font-bold text-slate-200 tracking-wide">
+      <div className="chart-header">
+        <div className="chart-header-left">
+          <div className="chart-title-box">
+            <span className="chart-title-text">
               {title}
             </span>
           </div>
           {trendInfo && (
-            <div className="px-3 py-1 bg-slate-900/80 backdrop-blur-sm rounded-lg border border-white/10">
-              <span className="text-xs font-medium text-slate-300">
+            <div className="trend-box">
+              <span className="trend-text">
                 {trendInfo}
               </span>
             </div>
           )}
         </div>
         {fibInfo && (
-          <div className="px-3 py-1 bg-amber-500/10 backdrop-blur-sm rounded-lg border border-amber-500/30 max-w-xs">
-            <span className="text-xs font-medium text-amber-200">
+          <div className="fib-box">
+            <span className="fib-text">
               Fib: {fibInfo}
             </span>
           </div>
@@ -380,7 +380,7 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
       </div>
 
       {/* Chart */}
-      <div ref={chartContainerRef} className="w-full h-full" />
+      <div ref={chartContainerRef} className="chart-view" />
     </div>
   );
 };
