@@ -2,8 +2,7 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { Candle, TradingSignal } from '@/utils/types';
-import { generateTradingSignals } from '@/utils/signalGenerator';
+import { Candle } from '@/utils/types';
 import { analyzeH1, analyzeM15, analyzeM5, analyzeM1 } from '@/utils/technicalAnalysis';
 import Dashboard from '@/components/Dashboard';
 import './Home.css';
@@ -18,8 +17,6 @@ export default function Home() {
   const [candlesM5, setCandlesM5] = useState<Candle[]>([]);
   const [candlesM15, setCandlesM15] = useState<Candle[]>([]);
   const [candles1H, setCandles1H] = useState<Candle[]>([]);
-  const [signals, setSignals] = useState<TradingSignal[]>([]);
-  const [latestSignal, setLatestSignal] = useState<TradingSignal | null>(null);
 
   // Memoized Analysis Results
   const h1Analysis = useMemo(() => {
@@ -55,33 +52,8 @@ export default function Home() {
       const currentM5 = timeframe === 'M5' ? candles : candlesM5;
       const currentM15 = timeframe === 'M15' ? candles : candlesM15;
       const current1H = timeframe === '1H' ? candles : candles1H;
-
-      // Generate signals when we have data from all timeframes
-      if (
-        currentM1.length > 20 &&
-        currentM5.length > 20 &&
-        currentM15.length > 20 &&
-        current1H.length > 50
-      ) {
-        const newSignals = generateTradingSignals(
-          currentM1,
-          currentM5,
-          currentM15,
-          current1H,
-          null // Fibonacci levels are calculated internally
-        );
-
-        if (newSignals.length > 0) {
-          const latest = newSignals[newSignals.length - 1];
-          // Only update if it's a new signal
-          if (!latestSignal || latest.time !== latestSignal.time) {
-            setLatestSignal(latest);
-            setSignals(newSignals);
-          }
-        }
-      }
     },
-    [candlesM1, candlesM5, candlesM15, candles1H, latestSignal]
+    [candlesM1, candlesM5, candlesM15, candles1H]
   );
 
   return (
@@ -92,7 +64,6 @@ export default function Home() {
         m15Status={m15Analysis.status}
         m5Confirmation={m5Analysis.confirmation}
         m1Trigger={m1Analysis.trigger}
-        currentSignal={latestSignal}
       />
 
       {/* 4-Chart Grid */}
@@ -103,7 +74,6 @@ export default function Home() {
             timeframe="M1" 
             title="1 MINUTE (ENTRY)"
             onDataUpdate={(data) => handleDataUpdate('M1', data)}
-            signals={signals}
           />
         </div>
 
@@ -113,7 +83,6 @@ export default function Home() {
             timeframe="M5" 
             title="5 MINUTE (CONFIRMATION)"
             onDataUpdate={(data) => handleDataUpdate('M5', data)}
-            signals={signals}
           />
         </div>
 
@@ -123,7 +92,6 @@ export default function Home() {
             timeframe="M15" 
             title="15 MINUTE (SETUP)"
             onDataUpdate={(data) => handleDataUpdate('M15', data)}
-            signals={signals}
           />
         </div>
 
@@ -133,7 +101,6 @@ export default function Home() {
             timeframe="1H" 
             title="1 HOUR (TREND)"
             onDataUpdate={(data) => handleDataUpdate('1H', data)}
-            signals={signals}
           />
         </div>
       </div>

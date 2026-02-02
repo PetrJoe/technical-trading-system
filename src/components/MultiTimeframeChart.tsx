@@ -6,14 +6,13 @@ import {
   IChartApi,
   ISeriesApi,
   CandlestickSeries,
-  LineSeries,
-  IPriceLine,
   SeriesMarker,
   Time,
   createSeriesMarkers,
   ISeriesMarkersPluginApi,
+  IPriceLine,
 } from 'lightweight-charts';
-import { Candle, Timeframe, FibonacciLevel, TradingSignal, SwingPoint, WebSocketMessage } from '@/utils/types';
+import { Candle, Timeframe, FibonacciLevel, SwingPoint, WebSocketMessage } from '@/utils/types';
 import { getRecentFibonacci } from '@/utils/fibonacci';
 import { analyzeTrend, findSupportResistanceZones } from '@/utils/technicalAnalysis';
 import { detectCandlestickPatterns } from '@/utils/candlestickPatterns';
@@ -25,7 +24,6 @@ interface MultiTimeframeChartProps {
   timeframe: Timeframe;
   title: string;
   onDataUpdate?: (candles: Candle[]) => void;
-  signals?: TradingSignal[];
 }
 
 const GRANULARITY_MAP: Record<Timeframe, number> = {
@@ -40,7 +38,6 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
   timeframe,
   title,
   onDataUpdate,
-  signals = [],
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -50,16 +47,11 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
   const patternsRef = useRef<SeriesMarker<Time>[]>([]); // Store latest patterns
   
   // Refs for props to avoid effect re-runs
-  const latestSignals = useRef(signals);
   const latestOnDataUpdate = useRef(onDataUpdate);
 
   useEffect(() => {
-    latestSignals.current = signals;
     latestOnDataUpdate.current = onDataUpdate;
-    
-    // Update markers whenever signals change
-    drawMarkers();
-  }, [signals, onDataUpdate]);
+  }, [onDataUpdate]);
 
   const [trendInfo, setTrendInfo] = useState<string>('');
   const [fibInfo, setFibInfo] = useState<string>('');
@@ -68,20 +60,6 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
     if (!seriesRef.current) return;
 
     let markers = [...patternsRef.current];
-    const signals = latestSignals.current;
-
-    // Add signal markers
-    if (signals.length > 0) {
-      const signalMarkers: SeriesMarker<Time>[] = signals.map((signal) => ({
-        time: signal.time as Time,
-        position: (signal.type === 'BUY' ? 'belowBar' : 'aboveBar'),
-        color: signal.type === 'BUY' ? '#10b981' : '#ef4444',
-        shape: (signal.type === 'BUY' ? 'arrowUp' : 'arrowDown'),
-        text: `${signal.type} ${(signal.confidence * 100).toFixed(0)}%`,
-        size: 2,
-      }));
-      markers = [...markers, ...signalMarkers];
-    }
 
     try {
       if (seriesMarkersRef.current) {
@@ -90,19 +68,6 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
     } catch (e) {
       console.error('Error setting markers:', e);
     }
-    
-    // Draw SL/TP lines
-    // Clear previous SL/TP lines that might be in srLinesRef (we need a better way to manage these if mixed)
-    // For now, let's assume srLinesRef handles all price lines and we clear them in drawSupportResistance.
-    // However, drawSupportResistance is called in updateAnalysis.
-    // If we call drawMarkers separately, we might need to manage SL/TP lines separately or re-draw all lines.
-    // Simpler approach: Let updateAnalysis handle everything, but trigger it? No, updateAnalysis needs candles.
-    
-    // Given the complexity, let's keep SL/TP drawing inside updateAnalysis for now, 
-    // or move it to a shared helper if we want instant updates on signal change.
-    // But since signals usually come from onDataUpdate -> parent -> signals prop, 
-    // the flow is: Data -> Parent -> Signals -> Chart.
-    // So when signals change, we SHOULD re-draw SL/TP.
   };
 
   useEffect(() => {
@@ -208,36 +173,6 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
             srLinesRef.current.push(priceLine);
         });
       }
-      
-      // Draw SL/TP lines here too since we cleared srLinesRef
-      const signals = latestSignals.current;
-      if (signals.length > 0 && seriesRef.current) {
-        const latestSignal = signals[signals.length - 1];
-        // Only show SL/TP for recent signals (within last 10 candles)
-        const signalAge = candles.length > 0 ? candles[candles.length - 1].time - latestSignal.time : 10000;
-        
-        if (signalAge < 3600) { 
-            const tpLine = seriesRef.current.createPriceLine({
-                price: latestSignal.takeProfit,
-                color: '#10b981',
-                lineWidth: 1,
-                lineStyle: 0,
-                axisLabelVisible: true,
-                title: 'TP',
-            });
-            srLinesRef.current.push(tpLine);
-
-            const slLine = seriesRef.current.createPriceLine({
-                price: latestSignal.stopLoss,
-                color: '#ef4444',
-                lineWidth: 1,
-                lineStyle: 0,
-                axisLabelVisible: true,
-                title: 'SL',
-            });
-            srLinesRef.current.push(slLine);
-        }
-      }
     };
 
     const updateAnalysis = (candles: Candle[]) => {
@@ -262,7 +197,7 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
         drawFibonacci(fibData);
       }
 
-      // Draw S/R zones and SL/TP
+      // Draw S/R zones
       drawSupportResistance(candles);
 
       // Detect patterns
@@ -330,8 +265,8 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
     wsService.subscribe(symbol, timeframe, granularity, handleDataMessage);
 
     const handleResize = () => {
-      if (chartContainerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({
+      if (chartContainerRef.current) {
+        chart.applyOptions({
           width: chartContainerRef.current.clientWidth,
           height: chartContainerRef.current.clientHeight,
         });
@@ -343,44 +278,20 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
     return () => {
       window.removeEventListener('resize', handleResize);
       wsService.unsubscribe(symbol, granularity, handleDataMessage);
-      if (chartRef.current) {
-        chartRef.current.remove();
-        chartRef.current = null;
-      }
-      seriesRef.current = null;
-      srLinesRef.current = [];
+      chart.remove();
     };
-  }, [symbol, timeframe]);
+  }, [timeframe, symbol]); // Re-run if timeframe or symbol changes
 
   return (
     <div className="chart-container">
-      {/* Header */}
       <div className="chart-header">
-        <div className="chart-header-left">
-          <div className="chart-title-box">
-            <span className="chart-title-text">
-              {title}
-            </span>
-          </div>
-          {trendInfo && (
-            <div className="trend-box">
-              <span className="trend-text">
-                {trendInfo}
-              </span>
-            </div>
-          )}
+        <h2 className="chart-title">{title}</h2>
+        <div className="chart-info">
+          <span>{trendInfo}</span>
+          {fibInfo && <span className="fib-info">{fibInfo}</span>}
         </div>
-        {fibInfo && (
-          <div className="fib-box">
-            <span className="fib-text">
-              Fib: {fibInfo}
-            </span>
-          </div>
-        )}
       </div>
-
-      {/* Chart */}
-      <div ref={chartContainerRef} className="chart-view" />
+      <div ref={chartContainerRef} className="chart-area" />
     </div>
   );
 };

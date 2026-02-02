@@ -1,5 +1,4 @@
 import React from 'react';
-import { TradingSignal } from '@/utils/types';
 import './Dashboard.css';
 
 interface DashboardProps {
@@ -7,7 +6,6 @@ interface DashboardProps {
   m15Status: 'VALID' | 'WAIT' | 'INVALID';
   m5Confirmation: 'BUY BIAS' | 'SELL BIAS' | 'NO CONFIRMATION';
   m1Trigger: 'BUY' | 'SELL' | 'WAIT';
-  currentSignal: TradingSignal | null;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({
@@ -15,23 +13,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   m15Status,
   m5Confirmation,
   m1Trigger,
-  currentSignal,
 }) => {
   let finalStatus = 'SCANNING MARKET';
   let statusType = 'scanning';
   let statusIcon = '🔍';
   
-  if (currentSignal) {
-    if (currentSignal.type === 'BUY') {
-      finalStatus = 'BUY SIGNAL ACTIVE';
-      statusType = 'buy';
-      statusIcon = '🚀';
-    } else {
-      finalStatus = 'SELL SIGNAL ACTIVE';
-      statusType = 'sell';
-      statusIcon = '🔻';
-    }
-  } else if (m15Status === 'VALID' && m5Confirmation !== 'NO CONFIRMATION') {
+  if (m15Status === 'VALID' && m5Confirmation !== 'NO CONFIRMATION') {
     finalStatus = 'POTENTIAL SETUP';
     statusType = 'potential';
     statusIcon = '⚠️';
@@ -56,19 +43,6 @@ const Dashboard: React.FC<DashboardProps> = ({
             {finalStatus}
             </div>
         </div>
-        
-        {currentSignal && (
-          <div className="signal-details">
-            <div className="detail-row">
-               <span>Confidence</span>
-               <span className={`detail-value ${statusType}`}>{(currentSignal.confidence * 100).toFixed(0)}%</span>
-            </div>
-            <div className="detail-row">
-               <span>Entry</span>
-               <span className="detail-value price">{currentSignal.price.toFixed(4)}</span>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 2. Analysis Grid (H1 -> M1) */}
@@ -102,30 +76,11 @@ const Dashboard: React.FC<DashboardProps> = ({
         ))}
       </div>
 
-      {/* 3. Trade Management (TP/SL) */}
-      {currentSignal ? (
-        <div className={`trade-management ${currentSignal.type === 'BUY' ? 'buy' : 'sell'}`}>
-           <div className="trade-column">
-              <span className="trade-label">Take Profit</span>
-              <span className="trade-value tp">{currentSignal.takeProfit.toFixed(4)}</span>
-           </div>
-           <div className="trade-divider"></div>
-           <div className="trade-column">
-              <span className="trade-label">Stop Loss</span>
-              <span className="trade-value sl">{currentSignal.stopLoss.toFixed(4)}</span>
-           </div>
-           <div className="trade-divider"></div>
-           <div className="trade-column risk-column">
-              <span className="trade-label trade-label-risk">Risk:Reward</span>
-              <span className="trade-value rr">1:{currentSignal.riskRewardRatio.toFixed(1)}</span>
-           </div>
-        </div>
-      ) : (
-        <div className="waiting-box">
-           <div className="pulse-dot"></div>
-           <span className="waiting-text">WAITING FOR SIGNAL...</span>
-        </div>
-      )}
+      {/* 3. Trade Management (TP/SL) - REMOVED */}
+      <div className="waiting-box">
+          <div className="pulse-dot"></div>
+          <span className="waiting-text">MARKET ANALYSIS ACTIVE</span>
+      </div>
     </div>
   );
 };
