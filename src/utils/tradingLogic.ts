@@ -450,13 +450,15 @@ export function detectM1ScalpEntry(
                const rsiOversold = rsiValue < 45;
 
                if ((isRejection || isBullishCandle) && rsiOversold) {
+                  const slPips = 5;
+                  const tpPips = 10;
                   fibSignal = {
                      type: 'BUY',
                      price: currentPrice,
                      time: lastCandle.time,
-                     stopLoss: fibs.level786, // SL below 61.8% (at 78.6%)
-                     takeProfit: fibs.level0, // TP at Recent High (0%)
-                     reason: 'Fib 50-61.8% Retracement'
+                     stopLoss: currentPrice - (slPips * pipSize),
+                     takeProfit: currentPrice + (tpPips * pipSize),
+                     reason: 'Fib Golden Zone + Fixed RR'
                   };
                }
             } else {
@@ -466,13 +468,15 @@ export function detectM1ScalpEntry(
                const rsiOverbought = rsiValue > 55;
 
                if ((isRejection || isBearishCandle) && rsiOverbought) {
+                  const slPips = 5;
+                  const tpPips = 10;
                   fibSignal = {
                      type: 'SELL',
                      price: currentPrice,
                      time: lastCandle.time,
-                     stopLoss: fibs.level786, // SL above 61.8% (at 78.6%)
-                     takeProfit: fibs.level0, // TP at Recent Low (0%)
-                     reason: 'Fib 50-61.8% Retracement'
+                     stopLoss: currentPrice + (slPips * pipSize),
+                     takeProfit: currentPrice - (tpPips * pipSize),
+                     reason: 'Fib Golden Zone + Fixed RR'
                   };
                }
             }
