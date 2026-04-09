@@ -2,17 +2,18 @@
   height: 100vh;
   background-color: #020617;
   display: grid;
-  grid-template-columns: 200px 1fr;
+  grid-template-columns: 1fr;
   grid-template-rows: 1fr auto;
   grid-template-areas: 
-    "sidebar charts"
-    "sidebar footer";
+    "charts"
+    "footer";
   overflow: hidden;
 }
 
 .dashboard-container {
   grid-area: sidebar;
   overflow-y: auto;
+  display: none;
 }
 
 .chart-grid {
@@ -24,6 +25,7 @@
   min-height: 0;
   height: 100%;
   padding: 0.25rem;
+  width: 100%;
 }
 
 .chart-wrapper {

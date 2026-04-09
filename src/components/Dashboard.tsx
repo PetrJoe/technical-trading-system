@@ -54,55 +54,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="dashboard-container">
-      
-      {/* 1. Main Status Box */}
-      <div className="status-box" style={{ borderColor: getStatusColor(status) }}>
-        <div className="status-header">
-            <span className="status-icon">
-                {status === 'ENTRY' ? '🚀' : status === 'CONFIRMATION' ? '⚠️' : status === 'SETUP' ? '👀' : '📊'}
-            </span>
-            <div className="status-text" style={{ color: getStatusColor(status) }}>
-                {status === 'ENTRY' ? 'TRADE ENTRY TRIGGERED' : 
-                 status === 'CONFIRMATION' ? 'AWAITING CONFIRMATION' : 
-                 status === 'SETUP' ? 'SETUP DETECTED' : 'SCANNING MARKETS'}
-            </div>
-        </div>
-        
-        <div className="signal-details">
-            <div className="signal-row">
-                <span className="label">ENTRY:</span> 
-                <span className="value">{signal ? signal.price.toFixed(5) : currentPrice ? currentPrice.toFixed(5) : '---'}</span>
-                {signal && (
-                    <span className={`type-tag ${signal.type === 'BUY' ? 'bullish' : 'bearish'}`}>
-                        {signal.type}
-                    </span>
-                )}
-                {!signal && trend && trend !== 'range' && (
-                    <span className={`type-tag ${trend === 'bullish' ? 'bullish' : 'bearish'}`}>
-                        {trend.toUpperCase()} BIAS
-                    </span>
-                )}
-            </div>
-            <div className="signal-row">
-                <span className="label">TP:</span> 
-                <span className="value">
-                  {signal 
-                    ? signal.takeProfit.toFixed(5) 
-                    : projected ? projected.tp : '---'
-                  }
-                </span>
-            </div>
-            <div className="signal-row">
-                <span className="label">SL:</span> 
-                <span className="value">
-                  {signal 
-                    ? signal.stopLoss.toFixed(5) 
-                    : projected ? projected.sl : '---'
-                  }
-                </span>
-            </div>
-        </div>
-      </div>
     </div>
   );
 };
