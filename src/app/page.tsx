@@ -23,42 +23,42 @@ const MultiTimeframeChart = dynamic(() => import('@/components/MultiTimeframeCha
 
 export default function Home() {
   const [candlesM1, setCandlesM1] = useState<Candle[]>([]);
+  const [candlesM3, setCandlesM3] = useState<Candle[]>([]);
   const [candlesM5, setCandlesM5] = useState<Candle[]>([]);
   const [candlesM15, setCandlesM15] = useState<Candle[]>([]);
-  const [candles1H, setCandles1H] = useState<Candle[]>([]);
   const [strategy, setStrategy] = useState<'standard' | 'scalping'>('scalping');
   const [activeTrade, setActiveTrade] = useState<TradingSignal | null>(null);
 
   // --- STANDARD STRATEGY LOGIC ---
 
-  // 1. H1 Trend Analysis
-  const h1Analysis = useMemo(() => {
+  // 1. M15 Trend Analysis (highest timeframe in current layout)
+  const trendAnalysis = useMemo(() => {
     // Always calculate zones for scalping support
-    if (candles1H.length < 50) return { bias: 'range' as const, zones: [] };
+    if (candlesM15.length < 50) return { bias: 'range' as const, zones: [] };
     
-    const bias = detectMarketStructure(candles1H);
-    const zones = findSupportResistanceZones(candles1H, 100);
+    const bias = detectMarketStructure(candlesM15);
+    const zones = findSupportResistanceZones(candlesM15, 100);
     
     return { bias, zones };
-  }, [candles1H]);
+  }, [candlesM15]);
 
-  // 2. M15 Setup Analysis
-  const m15Setup = useMemo(() => {
+  // 2. M5 Setup Analysis
+  const m5Setup = useMemo(() => {
     if (strategy !== 'standard') return false;
-    return detectSetupZone(candlesM15, h1Analysis.bias, h1Analysis.zones);
-  }, [candlesM15, h1Analysis, strategy]);
+    return detectSetupZone(candlesM5, trendAnalysis.bias, trendAnalysis.zones);
+  }, [candlesM5, trendAnalysis, strategy]);
 
-  // 3. M5 Confirmation Analysis
-  const m5Confirmation = useMemo(() => {
+  // 3. M3 Confirmation Analysis
+  const m3Confirmation = useMemo(() => {
     if (strategy !== 'standard') return false;
-    return detectConfirmation(candlesM5, h1Analysis.bias, m15Setup);
-  }, [candlesM5, h1Analysis.bias, m15Setup, strategy]);
+    return detectConfirmation(candlesM3, trendAnalysis.bias, m5Setup);
+  }, [candlesM3, trendAnalysis.bias, m5Setup, strategy]);
 
   // 4. M1 Entry Trigger
   const m1Entry = useMemo(() => {
     if (strategy !== 'standard') return null;
-    return detectEntryTrigger(candlesM1, h1Analysis.bias, m5Confirmation);
-  }, [candlesM1, h1Analysis.bias, m5Confirmation, strategy]);
+    return detectEntryTrigger(candlesM1, trendAnalysis.bias, m3Confirmation);
+  }, [candlesM1, trendAnalysis.bias, m3Confirmation, strategy]);
 
   // --- SCALPING STRATEGY LOGIC ---
 
@@ -134,8 +134,8 @@ export default function Home() {
     
     // Otherwise show normal scanning status
     if (strategy === 'standard') {
-      if (m5Confirmation) return 'CONFIRMATION';
-      if (m15Setup) return 'SETUP';
+      if (m3Confirmation) return 'CONFIRMATION';
+      if (m5Setup) return 'SETUP';
       return 'SCANNING';
     } else {
       // Scalping Status Mapping
@@ -143,15 +143,15 @@ export default function Home() {
       if (m5ScalpTrend !== 'range') return 'SCANNING'; // Have trend, looking for zone
       return 'SCANNING';
     }
-  }, [strategy, activeTrade, m5Confirmation, m15Setup, m5ScalpZone, m5ScalpTrend]);
+  }, [strategy, activeTrade, m3Confirmation, m5Setup, m5ScalpZone, m5ScalpTrend]);
 
   const handleDataUpdate = useCallback(
     (timeframe: string, candles: Candle[]) => {
       // Update candle data for each timeframe
       if (timeframe === 'M1') setCandlesM1(candles);
+      else if (timeframe === 'M3') setCandlesM3(candles);
       else if (timeframe === 'M5') setCandlesM5(candles);
       else if (timeframe === 'M15') setCandlesM15(candles);
-      else if (timeframe === '1H') setCandles1H(candles);
     },
     []
   );
@@ -165,7 +165,7 @@ export default function Home() {
         strategy={strategy}
         onStrategyChange={setStrategy}
         currentPrice={candlesM1.length > 0 ? candlesM1[candlesM1.length - 1].close : undefined}
-        trend={strategy === 'standard' ? h1Analysis.bias : m5ScalpTrend}
+        trend={strategy === 'standard' ? trendAnalysis.bias : m5ScalpTrend}
       />
 
       {/* 4-Chart Grid */}
@@ -180,30 +180,30 @@ export default function Home() {
           />
         </div>
 
-        {/* Top Right - M5 Chart (Confirmation) */}
+        {/* Top Right - M3 Chart (Confirmation) */}
+        <div className="chart-wrapper">
+          <MultiTimeframeChart 
+            timeframe="M3" 
+            title="3 MINUTE (CONFIRMATION)"
+            onDataUpdate={(data) => handleDataUpdate('M3', data)}
+          />
+        </div>
+
+        {/* Bottom Left - M5 Chart (Setup) */}
         <div className="chart-wrapper">
           <MultiTimeframeChart 
             timeframe="M5" 
-            title="5 MINUTE (CONFIRMATION)"
+            title="5 MINUTE (SETUP)"
             onDataUpdate={(data) => handleDataUpdate('M5', data)}
           />
         </div>
 
-        {/* Bottom Left - M15 Chart (Setup) */}
+        {/* Bottom Right - M15 Chart (Trend) */}
         <div className="chart-wrapper">
           <MultiTimeframeChart 
             timeframe="M15" 
-            title="15 MINUTE (SETUP)"
+            title="15 MINUTE (TREND)"
             onDataUpdate={(data) => handleDataUpdate('M15', data)}
-          />
-        </div>
-
-        {/* Bottom Right - 1H Chart (Trend) */}
-        <div className="chart-wrapper">
-          <MultiTimeframeChart 
-            timeframe="1H" 
-            title="1 HOUR (TREND)"
-            onDataUpdate={(data) => handleDataUpdate('1H', data)}
           />
         </div>
       </div>
