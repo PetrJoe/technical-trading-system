@@ -31,6 +31,63 @@ export function calculateEMA(
 }
 
 /**
+ * Calculate Arnaud Legoux Moving Average (ALMA) for latest candle
+ */
+export function calculateALMA(
+  candles: Candle[],
+  windowSize: number = 9,
+  offset: number = 0.85,
+  sigma: number = 6
+): number | null {
+  if (windowSize <= 0 || candles.length < windowSize) return null;
+
+  const safeSigma = sigma === 0 ? 1 : sigma;
+  const m = offset * (windowSize - 1);
+  const s = windowSize / safeSigma;
+
+  let weightedSum = 0;
+  let weightTotal = 0;
+
+  for (let i = 0; i < windowSize; i++) {
+    const weight = Math.exp(-((i - m) * (i - m)) / (2 * s * s));
+    const candle = candles[candles.length - windowSize + i];
+    weightedSum += candle.close * weight;
+    weightTotal += weight;
+  }
+
+  if (weightTotal === 0) return null;
+  return weightedSum / weightTotal;
+}
+
+/**
+ * Calculate ALMA values across all candles for chart plotting
+ */
+export function calculateALMASeries(
+  candles: Candle[],
+  windowSize: number,
+  offset: number,
+  sigma: number
+): Array<{ time: number; value: number }> {
+  if (windowSize <= 0 || candles.length < windowSize) return [];
+
+  const points: Array<{ time: number; value: number }> = [];
+
+  for (let i = windowSize - 1; i < candles.length; i++) {
+    const slice = candles.slice(i - windowSize + 1, i + 1);
+    const alma = calculateALMA(slice, windowSize, offset, sigma);
+
+    if (alma !== null) {
+      points.push({
+        time: candles[i].time,
+        value: alma,
+      });
+    }
+  }
+
+  return points;
+}
+
+/**
  * Determine overall market trend using multiple EMAs
  */
 export function analyzeTrend(
