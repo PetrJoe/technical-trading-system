@@ -88,7 +88,7 @@ class WebSocketService {
       end: 'latest',
       style: 'candles',
       granularity,
-      count: timeframe === '1H' ? 100 : 200,
+      count: timeframe === 'M15' ? 150 : 200,
     };
 
     if (this.socket?.readyState === WebSocket.OPEN) {
