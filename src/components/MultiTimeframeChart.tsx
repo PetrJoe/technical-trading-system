@@ -6,6 +6,7 @@ import {
   IChartApi,
   ISeriesApi,
   CandlestickSeries,
+  LineSeries,
   SeriesMarker,
   Time,
   createSeriesMarkers,
@@ -14,7 +15,7 @@ import {
 } from 'lightweight-charts';
 import { Candle, Timeframe, FibonacciLevel, SwingPoint, WebSocketMessage, SupportResistanceZone } from '@/utils/types';
 import { getRecentFibonacci } from '@/utils/fibonacci';
-import { analyzeTrend, findSupportResistanceZones } from '@/utils/technicalAnalysis';
+import { analyzeTrend, calculateALMASeries, findSupportResistanceZones } from '@/utils/technicalAnalysis';
 import { detectCandlestickPatterns } from '@/utils/candlestickPatterns';
 import WebSocketService from '@/services/WebSocketService';
 import './Chart.css';
@@ -29,9 +30,9 @@ interface MultiTimeframeChartProps {
 
 const GRANULARITY_MAP: Record<Timeframe, number> = {
   M1: 60,
+  M3: 180,
   M5: 300,
   M15: 900,
-  '1H': 3600,
 };
 
 const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
@@ -46,6 +47,8 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const seriesMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const srLinesRef = useRef<IPriceLine[]>([]);
+  const alma12Ref = useRef<ISeriesApi<'Line'> | null>(null);
+  const alma16Ref = useRef<ISeriesApi<'Line'> | null>(null);
   const patternsRef = useRef<SeriesMarker<Time>[]>([]); // Store latest patterns
   
   // Refs for props to avoid effect re-runs
@@ -127,8 +130,26 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
       wickDownColor: '#ef4444',
     });
 
+    const alma12Series = chart.addSeries(LineSeries, {
+      color: '#ffffff',
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      title: 'ALMA 12',
+    });
+
+    const alma16Series = chart.addSeries(LineSeries, {
+      color: '#ef4444',
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      title: 'ALMA 16',
+    });
+
     chartRef.current = chart;
     seriesRef.current = series;
+    alma12Ref.current = alma12Series;
+    alma16Ref.current = alma16Series;
     seriesMarkersRef.current = createSeriesMarkers(series, []);
 
     let allCandles: Candle[] = [];
@@ -185,6 +206,18 @@ const MultiTimeframeChart: React.FC<MultiTimeframeChartProps> = ({
 
     const updateAnalysis = (candles: Candle[]) => {
       if (candles.length < 20) return;
+
+      const alma12 = calculateALMASeries(candles, 12, 0.85, 8).map((p) => ({
+        time: p.time as Time,
+        value: p.value,
+      }));
+      const alma16 = calculateALMASeries(candles, 16, 0.85, -5).map((p) => ({
+        time: p.time as Time,
+        value: p.value,
+      }));
+
+      if (alma12Ref.current) alma12Ref.current.setData(alma12);
+      if (alma16Ref.current) alma16Ref.current.setData(alma16);
 
       // Analyze trend
       const trend = analyzeTrend(candles);
