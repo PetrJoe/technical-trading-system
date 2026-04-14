@@ -46,13 +46,13 @@ export interface TradingSignal {
   reason: string;
 }
 
-export type Timeframe = 'M1' | 'M5' | 'M15' | '1H';
+export type Timeframe = 'M1' | 'M3' | 'M5' | 'M15';
 
 export const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
   M1: 60,
+  M3: 180,
   M5: 300,
   M15: 900,
-  '1H': 3600,
 };
 
 export interface WebSocketMessage {
